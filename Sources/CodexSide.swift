@@ -4,9 +4,6 @@ import Foundation
 // Codex side (ChatGPT desktop / Codex CLI), read from the local logs in ~/.codex:
 // - CodexUsageIndexer: daily tokens and active time from ~/.codex/sessions
 //   (a reply counts when token_count's running total moves; input = uncached input).
-// - CodexLimits: the latest 5-hour / weekly rate limits Codex reported.
-// - SharedUsage: Claude limits written to a small JSON file that other local apps (e.g. a
-//   ChatGPT/Codex companion pet) can read.
 
 private struct CodexFileState: Codable {
     var offset: UInt64 = 0
@@ -226,69 +223,5 @@ final class CodexUsageIndexer: @unchecked Sendable {
     private static func projectName(fromFolder url: URL) -> String {
         // Codex files live in date folders; the real project comes from the cwd in session_meta.
         "未知项目"
-    }
-}
-
-
-// MARK: - Codex rate limits (latest token_count event in recent logs)
-
-struct CodexLimits {
-    var fiveHour: LimitWindow?
-    var weekly: LimitWindow?
-    var plan: String?
-    var observedAt: Date
-}
-
-enum CodexLimitsReader {
-    private static let root = FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent(".codex/sessions")
-
-    /// Reads only the tail of files touched in the last 8 days; returns the newest reading.
-    static func read() -> CodexLimits? {
-        guard let en = FileManager.default.enumerator(at: root, includingPropertiesForKeys: [.contentModificationDateKey]) else { return nil }
-        var files: [(URL, Date)] = []
-        for case let url as URL in en where url.pathExtension == "jsonl" {
-            let m = (try? url.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate) ?? .distantPast
-            if Date().timeIntervalSince(m) < 8 * 86400 { files.append((url, m)) }
-        }
-        let iso = ISO8601DateFormatter()
-        iso.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-        var best: (Date, [String: Any])?
-        for (url, _) in files.sorted(by: { $0.1 > $1.1 }).prefix(12) {
-            guard let h = try? FileHandle(forReadingFrom: url) else { continue }
-            let size = (try? h.seekToEnd()) ?? 0
-            try? h.seek(toOffset: size > 2_000_000 ? size - 2_000_000 : 0)
-            let data = (try? h.readToEnd()) ?? Data()
-            try? h.close()
-            for line in data.split(separator: 0x0A).reversed() where line.range(of: Data("\"rate_limits\"".utf8)) != nil {
-                guard let o = try? JSONSerialization.jsonObject(with: line) as? [String: Any],
-                      let p = o["payload"] as? [String: Any], let rl = p["rate_limits"] as? [String: Any], rl["primary"] != nil,
-                      let ts = (o["timestamp"] as? String).flatMap({ iso.date(from: $0) }) else { continue }
-                if best == nil || ts > best!.0 { best = (ts, rl) }
-                break
-            }
-        }
-        guard let (at, rl) = best else { return nil }
-        func win(_ any: Any?) -> LimitWindow? {
-            guard let d = any as? [String: Any], let u = (d["used_percent"] as? NSNumber)?.doubleValue else { return nil }
-            let reset = (d["resets_at"] as? NSNumber).map { Date(timeIntervalSince1970: $0.doubleValue) }
-            if let reset, reset < Date() { return LimitWindow(utilization: 0, resetsAt: nil) }
-            return LimitWindow(utilization: max(0, u), resetsAt: reset)
-        }
-        let plan = (rl["plan_type"] as? String).map { $0.prefix(1).uppercased() + $0.dropFirst() }
-        return CodexLimits(fiveHour: win(rl["primary"]), weekly: win(rl["secondary"]), plan: plan, observedAt: at)
-    }
-}
-
-// MARK: - Claude limits shared with other local apps
-
-enum SharedUsage {
-    /// ~/Library/Application Support/ClaudeDaxiaojie/latest-claude-usage.json
-    static let url = AppSupport.dir.appendingPathComponent("latest-claude-usage.json")
-
-    static func write(_ s: UsageSnapshot) {
-        func w(_ x: LimitWindow?) -> Any { x.map { ["utilization": $0.utilization, "resetsAt": $0.resetsAt?.timeIntervalSince1970 ?? 0] } ?? NSNull() }
-        let obj: [String: Any] = ["fiveHour": w(s.fiveHour), "sevenDay": w(s.sevenDay), "plan": s.plan ?? "",
-                                  "observedAt": Date().timeIntervalSince1970]
-        if let d = try? JSONSerialization.data(withJSONObject: obj) { try? d.write(to: url, options: .atomic) }
     }
 }

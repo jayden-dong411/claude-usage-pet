@@ -80,6 +80,34 @@ extension Mood {
     }
 }
 
+extension Mood {
+    /// Long-running state of the v3 figure for this mood.
+    var v3State: V3State {
+        switch self {
+        case .needsYou: return .waiting
+        case .working, .taskStarted: return .working
+        case .strained: return .strained
+        case .crushed: return .crushed
+        case .night: return .sleepy
+        default: return .idle
+        }
+    }
+
+    /// Reaction of the v3 figure for this mood.
+    var v3Action: V3Action {
+        switch self {
+        case .taskDone, .hop: return .jump
+        case .petted: return .shy
+        case .oops, .crushed: return .oops
+        case .needsYou: return .surprise
+        case .taskStarted, .working: return .start
+        case .care, .night: return .care
+        case .farewell: return .farewell
+        default: return .wave
+        }
+    }
+}
+
 /// Plays sprite animations into an image view: a base loop, reactions played N times on top,
 /// running while dragged, and look-toward-the-mouse poses while idle.
 @MainActor

@@ -16,156 +16,10 @@ struct DoroPetMain {
 
 let claudeBundleID = "com.anthropic.claudefordesktop"
 
-// MARK: - Pet view (click = panel, drag = move, right click = menu)
-
-final class PetView: NSView {
-    var onClick: (() -> Void)?
-    var onDoubleClick: (() -> Void)?
-    /// Mouse rubbed back and forth over `petRect` (the head / figure).
-    var onPet: (() -> Void)?
-    var petRect: () -> NSRect = { .zero }
-    var onDragStart: (() -> Void)?
-    var onDragMove: ((CGFloat) -> Void)?
-    var onDragEnd: (() -> Void)?
-    var menuProvider: (() -> NSMenu)?
-
-    private var startMouse = NSPoint.zero
-    private var startOrigin = NSPoint.zero
-    private var lastX: CGFloat = 0
-    private var dragging = false
-    private var pendingClick: DispatchWorkItem?
-    private var rubDir: CGFloat = 0
-    private var rubTurns: [Date] = []
-    private var rubLastX: CGFloat?
-    private var lastPet = Date.distantPast
-
-    override func updateTrackingAreas() {
-        super.updateTrackingAreas()
-        trackingAreas.forEach(removeTrackingArea)
-        addTrackingArea(NSTrackingArea(rect: bounds, options: [.mouseMoved, .mouseEnteredAndExited, .activeAlways, .inVisibleRect],
-                                       owner: self))
-    }
-
-    override func mouseExited(with event: NSEvent) { rubLastX = nil; rubTurns.removeAll() }
-
-    /// Counts left/right turns of the pointer over the figure; 4 turns within 1.6 s = petting.
-    override func mouseMoved(with event: NSEvent) {
-        let p = convert(event.locationInWindow, from: nil)
-        guard petRect().contains(p) else { rubLastX = nil; return }
-        defer { rubLastX = p.x }
-        guard let last = rubLastX else { return }
-        let dx = p.x - last
-        guard abs(dx) > 1.5 else { return }
-        let dir: CGFloat = dx > 0 ? 1 : -1
-        if rubDir != 0 && dir != rubDir {
-            let now = Date()
-            rubTurns = rubTurns.filter { now.timeIntervalSince($0) < 1.6 } + [now]
-            if rubTurns.count >= 4 && now.timeIntervalSince(lastPet) > 6 {
-                lastPet = now
-                rubTurns.removeAll()
-                onPet?()
-            }
-        }
-        rubDir = dir
-    }
-
-    override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
-    override func hitTest(_ point: NSPoint) -> NSView? { super.hitTest(point) == nil ? nil : self }
-
-    override func mouseDown(with event: NSEvent) {
-        startMouse = NSEvent.mouseLocation
-        lastX = startMouse.x
-        startOrigin = window?.frame.origin ?? .zero
-        dragging = false
-    }
-
-    override func mouseDragged(with event: NSEvent) {
-        let p = NSEvent.mouseLocation
-        let dx = p.x - startMouse.x, dy = p.y - startMouse.y
-        if !dragging && hypot(dx, dy) > 3 { dragging = true; onDragStart?() }
-        if dragging {
-            window?.setFrameOrigin(NSPoint(x: startOrigin.x + dx, y: startOrigin.y + dy))
-            onDragMove?(p.x - lastX)
-            lastX = p.x
-        }
-    }
-
-    /// A second click within 0.3 s is a double-click (jump); otherwise the click fires after that wait.
-    override func mouseUp(with event: NSEvent) {
-        defer { dragging = false }
-        if dragging { onDragEnd?(); return }
-        if let p = pendingClick {
-            p.cancel()
-            pendingClick = nil
-            onDoubleClick?()
-            return
-        }
-        let w = DispatchWorkItem { [weak self] in
-            self?.pendingClick = nil
-            self?.onClick?()
-        }
-        pendingClick = w
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3, execute: w)
-    }
-
-    override func rightMouseDown(with event: NSEvent) {
-        if let m = menuProvider?() { NSMenu.popUpContextMenu(m, with: event, for: self) }
-    }
-}
-
-/// Small rounded label whose colours follow light / dark mode.
-final class Chip: NSView {
-    let label = NSTextField(labelWithString: "")
-    var padding = NSSize(width: 8, height: 3)
-    var fill: NSColor { didSet { applyColors() } }
-    var border: NSColor? { didSet { applyColors() } }
-    var borderWidth: CGFloat = 1 { didSet { applyColors() } }
-
-    init(fill: NSColor, text: NSColor, border: NSColor? = nil, font: NSFont) {
-        self.fill = fill
-        self.border = border
-        super.init(frame: .zero)
-        wantsLayer = true
-        label.font = font
-        label.textColor = text
-        label.alignment = .center
-        label.lineBreakMode = .byWordWrapping
-        label.maximumNumberOfLines = 3
-        addSubview(label)
-        applyColors()
-    }
-    required init?(coder: NSCoder) { fatalError() }
-
-    override func viewDidChangeEffectiveAppearance() {
-        super.viewDidChangeEffectiveAppearance()
-        applyColors()
-    }
-
-    private func applyColors() {
-        effectiveAppearance.performAsCurrentDrawingAppearance {
-            layer?.backgroundColor = fill.cgColor
-            layer?.borderColor = border?.cgColor
-            layer?.borderWidth = border == nil ? 0 : borderWidth
-        }
-    }
-
-    /// Lays the chip out centred horizontally at `y`, wrapping at `maxWidth`.
-    func set(_ text: String, centerX: CGFloat, y: CGFloat, maxWidth: CGFloat, radius: CGFloat? = nil) {
-        label.stringValue = text
-        label.preferredMaxLayoutWidth = maxWidth - padding.width * 2
-        let s = label.sizeThatFits(NSSize(width: maxWidth - padding.width * 2, height: 200))
-        let w = ceil(min(maxWidth, s.width + padding.width * 2))
-        let h = ceil(s.height + padding.height * 2)
-        frame = NSRect(x: round(centerX - w / 2), y: y, width: w, height: h)
-        label.frame = NSRect(x: padding.width, y: padding.height, width: w - padding.width * 2, height: s.height)
-        layer?.cornerRadius = radius ?? h / 2
-    }
-}
-
 // MARK: - App delegate
 
 @MainActor
-final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, NSWindowDelegate {
+final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, NSWindowDelegate, PetHubClient {
     let model = AppModel()
     let dashboard = DashboardModel()
     let settings = Settings.shared
@@ -199,36 +53,33 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, NSW
     private var lastMouse = NSPoint.zero
     private var mouseMovedAt = Date.distantPast
     private var forceAnimated = false          // `--snapshot … --animated` (test only, not saved)
+    // v3 figure (Settings.figure == "v3", pictures from ai-chan-sheets)
+    private var v3: V3Figure?
+    private var forceV3 = false                // `--snapshot … --v3`
 
-    // Menu bar item
-    private var statusItem: NSStatusItem?
+    // Menu-bar item, focus timer and reminders are shared by all four pets (PetHub.swift).
+    private let hub = PetHub.shared
     private var statusIcons: [String: NSImage] = [:]
-    private var statusNote: (text: String, until: Date)?
-
-    // Focus timer (pomodoro): work, then a short rest
-    private var focusEnd: Date?
-    private var restEnd: Date?
-    private var focusTimer: Timer?
-    private var focusing: Bool { focusEnd != nil }
-
-    // Wellness reminders
+    private var focusing: Bool { hub.focusing }
+    /// Reminders pop the pet up over any app for a moment.
     private var forceShowUntil = Date.distantPast
-    private var streakStart: Date?
-    private var nextSitRemind = Date.distantFuture
-    private var lastClaudeActive = Date.distantPast
-    private var lastNightRemind = Date.distantPast
-    private var animated: Bool { (settings.animatedMode || forceAnimated) && LadySprite.available }
+    private var animated: Bool { ((settings.figure == "lady" && !forceV3) || forceAnimated) && LadySprite.available }
+    private var v3Mode: Bool { ((settings.figure == "v3" && !forceAnimated) || forceV3) && V3Assets.available }
 
     // Layout in base units (scaled by Settings.scale), top-down: bubble, head/figure, tasks, usage pill.
-    private var baseSize: NSSize { animated ? NSSize(width: 220, height: 320) : NSSize(width: 220, height: 300) }
+    private var baseSize: NSSize {
+        v3Mode ? NSSize(width: 220, height: 336) : animated ? NSSize(width: 220, height: 320) : NSSize(width: 220, height: 300)
+    }
     private var imgRect: NSRect {
-        animated ? NSRect(x: 35, y: 122, width: 150, height: 162) : NSRect(x: 40, y: 116, width: 140, height: 140)
+        v3Mode ? NSRect(x: 26, y: 116, width: 168, height: 188)
+            : animated ? NSRect(x: 35, y: 122, width: 150, height: 162) : NSRect(x: 40, y: 116, width: 140, height: 140)
     }
     private var belowHead: CGFloat { imgRect.minY + (animated ? 6 : 4) }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         snapshotMode = CommandLine.arguments.contains("--snapshot")
         forceAnimated = snapshotMode && CommandLine.arguments.contains("--animated")
+        forceV3 = snapshotMode && CommandLine.arguments.contains("--v3")
         buildPanel()
         model.onChange = { [weak self] in self?.refreshPet() }
         model.onTaskFinished = { [weak self] s in self?.react(.taskDone, say: "「\(s.name)」完成了哦～") }
@@ -251,11 +102,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, NSW
         settings.onChange = { [weak self] in self?.applySettings() }
         model.start()
         dashboard.start()
+        if !snapshotMode { hub.start(me: "claude", client: self) }
         react(.greet, say: "本小姐驾到～ 点我看用量")
         faceTimer = Timer.scheduledTimer(withTimeInterval: 2, repeats: true) { [weak self] _ in
             Task { @MainActor in
                 self?.tickFace()
-                self?.tickWellness()
                 self?.updateVisibility()
             }
         }
@@ -293,11 +144,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, NSW
                         var x = d; x.tokens.input /= 3; x.tokens.output /= 3; x.tokens.cacheRead /= 4; x.tokens.cacheWrite /= 4
                         x.activeSeconds /= 2; return x
                     }
-                    self.model.codex = CodexLimits(
-                        fiveHour: LimitWindow(utilization: 22, resetsAt: Date().addingTimeInterval(9000)),
-                        weekly: LimitWindow(utilization: 47, resetsAt: Date().addingTimeInterval(300000)),
-                        plan: "plus", observedAt: Date().addingTimeInterval(-600))
-                    if args.contains("--focus") { self.focusEnd = Date().addingTimeInterval(23 * 60 + 12) }
+                    self.model.peers = [
+                        PeerUsage(provider: "codex", title: "ChatGPT · Codex", plan: "Plus",
+                                  windows: [PeerWindow(label: "5 小时", utilization: 22, resetsAt: Date().addingTimeInterval(9000)),
+                                            PeerWindow(label: "每周", utilization: 47, resetsAt: Date().addingTimeInterval(300000))],
+                                  observedAt: Date().addingTimeInterval(-600)),
+                    ]
+                    if args.contains("--focus") { self.hub.setDemoFocus(23 * 60 + 12) }
                     self.refreshPet()
                     self.setFace("ojou_laugh")
                     self.say("本小姐驾到～ 点我看用量")
@@ -428,10 +281,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, NSW
         }
         petView.petRect = { [weak self] in self?.imgRect ?? .zero }
         petView.onDragStart = { [weak self] in self?.popover?.performClose(nil) }
-        petView.onDragMove = { [weak self] dx in self?.animator?.drag(dx) }
+        petView.onDragMove = { [weak self] dx in self?.animator?.drag(dx); self?.v3?.drag(dx) }
         petView.onDragEnd = { [weak self] in
             self?.saveOrigin()
             self?.animator?.endDrag()
+            self?.v3?.endDrag()
         }
         petView.menuProvider = { [weak self] in self?.buildMenu() ?? NSMenu() }
 
@@ -477,13 +331,32 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, NSW
         petView.frame = NSRect(origin: .zero, size: size)
         petView.bounds = NSRect(origin: .zero, size: baseSize)
         panel.alphaValue = CGFloat(settings.opacity)
-        updateStatusItem()
         updateVisibility()
     }
 
-    /// Starts or stops the animated figure to match Settings.animatedMode.
+    /// Starts or stops the animated / v3 figure to match Settings.figure.
     private func applyMode() {
+        if !v3Mode, let f = v3 {
+            f.stop()
+            v3 = nil
+            imageView.imageScaling = .scaleProportionallyUpOrDown
+            model.frame = nil
+            moodKey = ""
+            face = nil
+        }
         imageView.frame = imgRect
+        if v3Mode && v3 == nil {
+            animator?.stop(); animator = nil
+            lookTimer?.invalidate(); lookTimer = nil
+            let f = V3Figure(imageView: imageView, home: imgRect) { [weak self] img in self?.model.frame = img }
+            v3 = f
+            moodKey = ""
+            f.start()
+            tickFace()
+            refreshPet()
+            return
+        }
+        if v3 != nil { refreshPet(); return }
         if animated && animator == nil {
             let a = SpriteAnimator(imageView: imageView) { [weak self] img in self?.model.frame = img }
             animator = a
@@ -521,10 +394,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, NSW
         }
     }
 
-    @objc private func menuToggleAnimated() {
-        guard LadySprite.available else { return }
-        settings.animatedMode.toggle()
-        react(.greet, seconds: 3, say: settings.animatedMode ? "换成可动小人啦～" : "换回表情头像啦～")
+    @objc private func menuPickFigure(_ sender: NSMenuItem) {
+        guard let id = sender.representedObject as? String, id != settings.figure else { return }
+        settings.figure = id
+        let name = FigureOption.available.first { $0.id == id }?.title ?? id
+        react(.greet, seconds: 3, say: "换成\(name)啦～")
     }
 
     // MARK: Only over Claude
@@ -577,11 +451,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, NSW
         } else if model.needsLogin {
             text = "点我登录看用量"
         }
-        if let f = focusEnd {
-            text = "🍅 专注 \(Self.mmss(f.timeIntervalSinceNow))"
-        } else if let r = restEnd {
-            text = "☕ 休息 \(Self.mmss(r.timeIntervalSinceNow))"
-        }
+        if let p = hub.pillText { text = p }
         // Task progress sits right under the head, the usage pill under that.
         var top = belowHead
         if let t = taskText() {
@@ -596,12 +466,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, NSW
         }
         pill.set(text, centerX: baseSize.width / 2, y: 0, maxWidth: baseSize.width)
         pill.setFrameOrigin(NSPoint(x: pill.frame.minX, y: top - pill.frame.height))
-        updateStatusItem()
-    }
-
-    static func mmss(_ secs: TimeInterval) -> String {
-        let s = max(0, Int(secs.rounded(.up)))
-        return String(format: "%d:%02d", s / 60, s % 60)
     }
 
     private func clip(_ s: String, _ n: Int) -> String {
@@ -652,9 +516,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, NSW
 
     private func setFace(_ name: String) {
         face = name
-        if animator == nil { imageView.image = Faces.image(name) }
+        if animator == nil && v3 == nil { imageView.image = Faces.image(name) }
         model.face = name
-        updateStatusItem()
     }
 
     /// Picks a new base face when the mood changes or the rotation is due.
@@ -670,10 +533,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, NSW
         let moods = baseMoods()
         let key = moods.map(\.rawValue).joined(separator: ",")
         let moodChanged = key != moodKey
-        if let animator {
-            // One animation at a time: waiting > working > usage mood.
-            let main: Mood = moods.contains(.needsYou) ? .needsYou : moods.contains(.working) ? .working : moods[0]
-            animator.setBase(main.ladyAnim)
+        if animator != nil || v3 != nil {
+            // One animation at a time: waiting > working > usage mood (late night counts as sleepy when calm).
+            var main: Mood = moods.contains(.needsYou) ? .needsYou : moods.contains(.working) ? .working : moods[0]
+            if main == .breezy || main == .calm, moods.contains(.night) { main = .night }
+            animator?.setBase(main.ladyAnim)
+            v3?.setState(main.v3State)
             model.face = face ?? "hi"
             moodKey = key
             if now >= nextRotate {
@@ -700,6 +565,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, NSW
     private func react(_ mood: Mood, seconds: Double = 5, say text: String? = nil) {
         if let animator {
             animator.react(mood.ladyAnim, loops: max(1, Int((seconds / 1.2).rounded())))
+        } else if let v3 {
+            v3.react(mood.v3Action, seconds: min(seconds, 4))
         } else {
             setFace(Faces.pick(from: [mood], avoiding: face))
         }
@@ -715,7 +582,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, NSW
     }
 
     private func say(_ text: String, seconds: Double = 5) {
-        bubble.set(text, centerX: baseSize.width / 2, y: imgRect.maxY - (animated ? 6 : 18), maxWidth: baseSize.width - 8, radius: 12)
+        bubble.set(text, centerX: baseSize.width / 2, y: imgRect.maxY - (v3Mode ? 2 : animated ? 6 : 18), maxWidth: baseSize.width - 8, radius: 12)
+        if let v3 { v3.show(v3.face, seconds: seconds) }
         bubble.isHidden = false
         bubbleHide?.cancel()
         let w = DispatchWorkItem { [weak self] in self?.bubble.isHidden = true }
@@ -872,7 +740,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, NSW
     /// Double-click: a little jump (whole-body jump animation, or a hop of the head sticker).
     private func hop() {
         popover?.performClose(nil)
-        if animator != nil {
+        if animator != nil || v3 != nil {
             react(.hop, seconds: 2.4)
             return
         }
@@ -892,107 +760,28 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, NSW
         if Int.random(in: 0..<3) == 0, let line = Mood.hop.lines.randomElement() { say(line, seconds: 2.5) }
     }
 
-    // MARK: Focus timer
+    // MARK: Shared hub (menu bar, focus timer, reminders)
 
-    private func startFocus() {
-        let mins = settings.focusMinutes
-        restEnd = nil
-        focusEnd = Date().addingTimeInterval(mins * 60)
-        streakStart = nil                       // breaks are built into focus mode
-        react(.taskStarted, seconds: 4, say: "专注 \(Int(mins)) 分钟，开始！本小姐帮你看着时间～")
-        runFocusTimer()
-        refreshPet()
-    }
+    func hubStateChanged() { refreshPet() }
 
-    private func stopFocus() {
-        let wasFocusing = focusing
-        focusEnd = nil
-        restEnd = nil
-        focusTimer?.invalidate()
-        focusTimer = nil
-        say(wasFocusing ? "好吧，这次就先到这里～" : "那就继续加油吧！")
-        refreshPet()
-    }
-
-    private func runFocusTimer() {
-        focusTimer?.invalidate()
-        focusTimer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in
-            Task { @MainActor in self?.tickFocus() }
-        }
-    }
-
-    private func tickFocus() {
-        let now = Date()
-        if let f = focusEnd, now >= f {
-            focusEnd = nil
-            restEnd = now.addingTimeInterval(5 * 60)
-            NSSound(named: "Glass")?.play()
-            remind(.taskDone, "专注 \(Int(settings.focusMinutes)) 分钟完成！起来活动 5 分钟、喝口水吧～", note: "🍅 完成！")
-        } else if let r = restEnd, now >= r {
-            restEnd = nil
-            focusTimer?.invalidate()
-            focusTimer = nil
-            streakStart = nil
-            NSSound(named: "Tink")?.play()
-            remind(.greet, "休息结束～ 要再来一轮专注的话右键我哦", note: "☕ 休息结束")
-        }
-        refreshPet()
-    }
-
-    // MARK: Wellness reminders
-
-    /// Shows a reminder even when Claude isn't in front: the pet pops up for a while and the
-    /// menu bar item shows `note`.
-    private func remind(_ mood: Mood, _ text: String, note: String, seconds: Double = 12) {
-        forceShowUntil = Date().addingTimeInterval(seconds)
-        statusNote = (note, forceShowUntil)
+    func hubShowReminder(_ e: HubEvent) {
+        let mood: Mood = e.kind == "focusDone" ? .taskDone : e.kind == "restDone" ? .greet : e.kind == "night" ? .night : .care
+        if e.kind == "focusDone" { NSSound(named: "Glass")?.play() }
+        if e.kind == "restDone" { NSSound(named: "Tink")?.play() }
+        forceShowUntil = Date().addingTimeInterval(12)
         updateVisibility()
-        react(mood, seconds: seconds, say: nil)
-        say(text, seconds: seconds)
-        updateStatusItem()
+        react(mood, seconds: 12, say: nil)
+        say(e.text, seconds: 12)
     }
 
-    /// Seconds since the last keyboard / mouse input anywhere.
-    private func inputIdleSeconds() -> TimeInterval {
-        CGEventSource.secondsSinceLastEventType(.combinedSessionState, eventType: CGEventType(rawValue: ~0)!)
+    func hubShowPanel() {
+        forceShowUntil = Date().addingTimeInterval(20)
+        updateVisibility()
+        if popover?.isShown != true { togglePopover() }
     }
 
-    /// Continuous-use streak (reset by 5 min away from the keyboard or 10 min without Claude)
-    /// and late-night use.
-    private func tickWellness() {
-        guard !snapshotMode else { return }
-        let now = Date()
-        if let note = statusNote, now >= note.until { statusNote = nil; updateStatusItem() }
-        let idle = inputIdleSeconds()
-        let front = NSWorkspace.shared.frontmostApplication?.bundleIdentifier
-        if idle < 120 && (front == claudeBundleID || model.busyCount > 0 || !model.waitingSessions.isEmpty) {
-            lastClaudeActive = now
-        }
-        if idle >= 300 || now.timeIntervalSince(lastClaudeActive) > 600 || focusing || restEnd != nil {
-            streakStart = nil
-        } else if streakStart == nil {
-            streakStart = now
-            nextSitRemind = now.addingTimeInterval(2 * 3600)
-        }
-        if settings.sitReminder, let start = streakStart, now >= nextSitRemind {
-            nextSitRemind = now.addingTimeInterval(30 * 60)
-            let mins = Int(now.timeIntervalSince(start) / 60)
-            let span = mins >= 60 ? "\(mins / 60) 小时\(mins % 60 > 0 ? " \(mins % 60) 分" : "")" : "\(mins) 分钟"
-            remind(.care, "已经连续用了 \(span)啦，站起来走走、喝口水吧～", note: "🧋 该活动啦")
-        }
-        let hour = Calendar.current.component(.hour, from: now)
-        if settings.nightReminder, (0..<5).contains(hour), now.timeIntervalSince(lastClaudeActive) < 120,
-           now.timeIntervalSince(lastNightRemind) > 3600 {
-            lastNightRemind = now
-            let line = ["已经 \(hour == 0 ? "12" : "\(hour)") 点多了，早点休息吧～", "熬夜伤皮肤，本小姐要去睡美容觉了…你也是！",
-                        "这么晚还在忙？存个档明天再继续吧"].randomElement()!
-            remind(.night, line, note: "🌙 该睡啦")
-        }
-    }
-
-    // MARK: Menu bar item
-
-    private func statusIcon(_ name: String) -> NSImage? {
+    func hubStatusIcon() -> NSImage? {
+        let name = animator == nil && v3 == nil ? (face ?? "hi") : "hi"
         if let i = statusIcons[name] { return i }
         guard let src = Faces.image(name) else { return nil }
         let img = NSImage(size: NSSize(width: 18, height: 18), flipped: false) { r in
@@ -1003,75 +792,28 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, NSW
         return img
     }
 
-    private func updateStatusItem() {
-        guard !snapshotMode, settings.menuBarIcon else {
-            if let s = statusItem { NSStatusBar.system.removeStatusItem(s); statusItem = nil }
-            return
-        }
-        if statusItem == nil {
-            let s = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
-            s.button?.target = self
-            s.button?.action = #selector(statusClicked(_:))
-            s.button?.sendAction(on: [.leftMouseUp, .rightMouseUp])
-            s.button?.imagePosition = .imageLeft
-            s.button?.font = .monospacedDigitSystemFont(ofSize: 12, weight: .medium)
-            statusItem = s
-        }
-        guard let button = statusItem?.button else { return }
-        button.image = statusIcon(animator == nil ? (face ?? "hi") : "hi")
-        var title: String
-        if let note = statusNote, Date() < note.until {
-            title = note.text
-        } else if let f = focusEnd {
-            title = "🍅 \(Self.mmss(f.timeIntervalSinceNow))"
-        } else if let r = restEnd {
-            title = "☕ \(Self.mmss(r.timeIntervalSinceNow))"
-        } else if let w = model.usage?.fiveHour {
-            title = "5h \(Int(w.utilization.rounded()))%"
-        } else {
-            title = model.needsLogin ? "未登录" : "5h —"
-        }
-        if !model.waitingSessions.isEmpty && focusEnd == nil { title = "⏳ " + title }
-        if button.title != " " + title { button.title = " " + title }
-        var tip = "Claude大小姐"
-        if let u = model.usage {
-            tip += "\n5 小时 \(u.fiveHour.map { Fmt.pct($0.utilization) } ?? "—") · 每周 \(u.sevenDay.map { Fmt.pct($0.utilization) } ?? "—")"
-        }
-        if model.busyCount > 0 { tip += "\n\(model.busyCount) 个任务进行中" }
-        if !model.waitingSessions.isEmpty { tip += "\n\(model.waitingSessions.count) 个会话在等你" }
-        button.toolTip = tip + "\n左键看详情 · 右键菜单"
-    }
-
-    @objc private func statusClicked(_ sender: NSStatusBarButton) {
-        if NSApp.currentEvent?.type == .rightMouseUp {
-            popover?.performClose(nil)
-            buildMenu().popUp(positioning: nil, at: NSPoint(x: 0, y: sender.bounds.height + 4), in: sender)
-        } else {
-            togglePopover(from: sender)
-        }
-    }
+    func hubStatusMenu() -> NSMenu { buildMenu() }
 
     // MARK: Right-click menu
 
     private func buildMenu() -> NSMenu {
         let m = NSMenu()
         func item(_ title: String, _ sel: Selector) { m.addItem(withTitle: title, action: sel, keyEquivalent: "").target = self }
-        if LadySprite.available {
-            item(settings.animatedMode ? "切换成表情头像" : "切换成可动小人", #selector(menuToggleAnimated))
+        let options = FigureOption.available
+        if options.count > 1 {
+            for o in options {
+                let it = m.addItem(withTitle: "形象：\(o.title)", action: #selector(menuPickFigure(_:)), keyEquivalent: "")
+                it.target = self
+                it.representedObject = o.id
+                it.state = settings.figure == o.id ? .on : .off
+            }
             m.addItem(.separator())
         }
         item("查看用量和任务", #selector(menuShow))
         item("用量统计…", #selector(menuDashboard))
         item("立即刷新", #selector(menuRefresh))
         m.addItem(.separator())
-        if let f = focusEnd {
-            item("结束专注（还剩 \(Self.mmss(f.timeIntervalSinceNow))）", #selector(menuStopFocus))
-        } else if let r = restEnd {
-            item("跳过休息（还剩 \(Self.mmss(r.timeIntervalSinceNow))）", #selector(menuStopFocus))
-            item("再专注 \(Int(settings.focusMinutes)) 分钟", #selector(menuStartFocus))
-        } else {
-            item("🍅 开始专注 \(Int(settings.focusMinutes)) 分钟", #selector(menuStartFocus))
-        }
+        hub.addFocusItems(to: m)
         m.addItem(.separator())
         item("重新读取桌面版登录", #selector(menuDesktopLogin))
         item("登录 / 切换 claude.ai 账号…", #selector(menuLogin))
@@ -1091,8 +833,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, NSW
     }
 
     @objc private func menuShow() { togglePopover() }
-    @objc private func menuStartFocus() { startFocus() }
-    @objc private func menuStopFocus() { stopFocus() }
     @objc private func menuDashboard() { openDashboard() }
     @objc private func menuSettings() { openSettings() }
     @objc private func menuRefresh() { Task { await model.refreshUsage(); say("刷新好啦") } }
@@ -1123,6 +863,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, NSW
         a.messageText = "素材署名"
         a.informativeText = Doro.attribution + "\n\n形象图片是该仓库 head/ 目录的全部 80 张，缩小了尺寸并去掉了白色外框，按 CC BY-NC-SA 4.0 非商业使用。"
             + (LadySprite.available ? "\n\n可动小人：github.com/houn1u/claude-lady-pets-v2（Claude 大小姐 Pets v2 动态图集）。该仓库没有开放授权，只在本机使用，不随安装包分发。" : "")
+            + (V3Assets.available ? "\n\nv3 小人：Claude娘设定图里的 8 种表情，来自 github.com/lmy414/ai-chan-sheets，角色设定 ZipZipPipe，CC BY-NC-SA 4.0；本应用去掉了白底并缩小了尺寸。" : "")
         a.addButton(withTitle: "好")
         a.addButton(withTitle: "打开素材仓库")
         NSApp.activate(ignoringOtherApps: true)

@@ -41,11 +41,9 @@ final class Settings: ObservableObject {
     @Published var hideInFullscreen: Bool { didSet { save("hideInFullscreen", hideInFullscreen) } }
     @Published var chatter: Bool { didSet { save("chatter", chatter) } }
     @Published var alertWaiting: Bool { didSet { save("alertWaiting", alertWaiting) } }
-    @Published var animatedMode: Bool { didSet { save("animatedMode", animatedMode) } }
-    @Published var menuBarIcon: Bool { didSet { save("menuBarIcon", menuBarIcon) } }
-    @Published var focusMinutes: Double { didSet { save("focusMinutes", focusMinutes) } }
-    @Published var sitReminder: Bool { didSet { save("sitReminder", sitReminder) } }
-    @Published var nightReminder: Bool { didSet { save("nightReminder", nightReminder) } }
+    /// Which look the pet uses: "stickers" (80 head stickers), "lady" (v2 animated figure) or "v3".
+    @Published var figure: String { didSet { save("figure", figure) } }
+    var animatedMode: Bool { figure == "lady" }
 
     private init() {
         let d = UserDefaults.standard
@@ -58,11 +56,7 @@ final class Settings: ObservableObject {
         hideInFullscreen = flag("hideInFullscreen", false)
         chatter = flag("chatter", true)
         alertWaiting = flag("alertWaiting", true)
-        animatedMode = flag("animatedMode", false)
-        menuBarIcon = flag("menuBarIcon", true)
-        focusMinutes = num("focusMinutes", 25)
-        sitReminder = flag("sitReminder", true)
-        nightReminder = flag("nightReminder", true)
+        figure = d.string(forKey: "figure") ?? (flag("animatedMode", false) ? "lady" : "stickers")
     }
 
     private func save(_ key: String, _ value: Any) {
@@ -73,7 +67,6 @@ final class Settings: ObservableObject {
     func reset() {
         scale = 1.0; opacity = 1.0; rotateSeconds = 35
         onlyWithClaude = true; hideInFullscreen = false; chatter = true; alertWaiting = true
-        menuBarIcon = true; focusMinutes = 25; sitReminder = true; nightReminder = true
     }
 }
 
@@ -101,27 +94,19 @@ struct SettingsView: View {
                         Text("约 \(Int(s.rotateSeconds)) 秒").monospacedDigit().frame(width: 64, alignment: .trailing)
                     }
                 }
-                Toggle("可动小人模式（全身动画，替代表情头像）", isOn: $s.animatedMode)
-                    .disabled(!LadySprite.available)
-                    .help(LadySprite.available ? "" : "这个版本没有打包可动小人素材")
+                Picker("形象", selection: $s.figure) {
+                    ForEach(FigureOption.available) { Text($0.title).tag($0.id) }
+                }
                 Toggle("偶尔说句话", isOn: $s.chatter)
             }
             Section("什么时候出现") {
                 Toggle("只在 Claude 在前台时显示", isOn: $s.onlyWithClaude)
                 Toggle("Claude 全屏时隐藏", isOn: $s.hideInFullscreen)
-                Toggle("在菜单栏显示图标和 5 小时用量", isOn: $s.menuBarIcon)
             }
             Section("提醒") {
                 Toggle("会话等你批准或回复时提醒", isOn: $s.alertWaiting)
-                Toggle("连续使用 2 小时提醒起来活动（之后每 30 分钟）", isOn: $s.sitReminder)
-                Toggle("凌晨 0–5 点还在用时提醒睡觉", isOn: $s.nightReminder)
-                LabeledContent("专注时长") {
-                    HStack {
-                        Slider(value: $s.focusMinutes, in: 10...60, step: 5)
-                        Text("\(Int(s.focusMinutes)) 分钟").monospacedDigit().frame(width: 56, alignment: .trailing)
-                    }
-                }
             }
+            HubSettingsSection()
             HStack {
                 Spacer()
                 Button("恢复默认") { s.reset() }
@@ -130,5 +115,19 @@ struct SettingsView: View {
         .formStyle(.grouped)
         .frame(width: 420)
         .fixedSize(horizontal: false, vertical: true)
+    }
+}
+
+/// The looks this build can show (the v2 / v3 pictures are only bundled when present at build time).
+struct FigureOption: Identifiable {
+    let id: String
+    let title: String
+    let icon: String
+
+    static var available: [FigureOption] {
+        var out = [FigureOption(id: "stickers", title: "表情头像", icon: "face.smiling")]
+        if LadySprite.available { out.append(FigureOption(id: "lady", title: "可动小人", icon: "figure.wave")) }
+        if V3Assets.available { out.append(FigureOption(id: "v3", title: "v3 小人", icon: "figure.stand.dress")) }
+        return out
     }
 }

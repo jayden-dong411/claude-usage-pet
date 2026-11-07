@@ -39,8 +39,8 @@ final class AppModel: ObservableObject {
     @Published var face = "hi"
     /// Current frame of the animated figure (nil in sticker mode).
     @Published var frame: NSImage?
-    /// Latest Codex (ChatGPT) limits from ~/.codex logs, shown alongside Claude's.
-    @Published var codex: CodexLimits?
+    /// Codex and Grok usage, shown alongside Claude's (see Peers.swift).
+    @Published var peers: [PeerUsage] = []
 
     var onChange: (() -> Void)?
     var onTaskFinished: ((SessionInfo) -> Void)?
@@ -102,8 +102,8 @@ final class AppModel: ObservableObject {
 
     func refreshCodex() {
         Task.detached {
-            let c = CodexLimitsReader.read()
-            await MainActor.run { self.codex = c; self.onChange?() }
+            let p = PeerStore.peers(excluding: "claude")
+            await MainActor.run { self.peers = p; self.onChange?() }
         }
     }
 
@@ -182,7 +182,11 @@ final class AppModel: ObservableObject {
         needsLogin = false
         lastUsageUpdate = Date()
         history.record(snap)
-        SharedUsage.write(snap)            // for other local apps (latest-claude-usage.json)
+        PeerStore.write(PeerUsage(          // for the GPT龙娘 / Grok pets
+            provider: "claude", title: "Claude", plan: snap.plan,
+            windows: [snap.fiveHour.map { PeerWindow(label: "5 小时", utilization: $0.utilization, resetsAt: $0.resetsAt) },
+                      snap.sevenDay.map { PeerWindow(label: "每周", utilization: $0.utilization, resetsAt: $0.resetsAt) }].compactMap { $0 },
+            observedAt: Date()))
         onChange?()
         onUsageLoaded?(snap)
     }

@@ -47,6 +47,13 @@ if [[ -f "$LADY" && "${EXCLUDE_LADY:-0}" != "1" ]]; then
   echo "  已包含可动小人素材（仅本机）"
 fi
 
+# v3 figure (github.com/lmy414/ai-chan-sheets, CC BY-NC-SA 4.0), made by ../Tools/make_v3_assets.py.
+if [[ -f "$ROOT/Assets/v3/face_smile.png" ]]; then
+  mkdir -p "$RES/v3"
+  cp "$ROOT"/Assets/v3/*.png "$ROOT/Assets/v3/SOURCE.txt" "$RES/v3/"
+  echo "  已包含 v3 小人素材"
+fi
+
 echo "• 生成图标…"
 ICONSET="$TMP/AppIcon.iconset"
 mkdir -p "$ICONSET"

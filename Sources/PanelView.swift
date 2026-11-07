@@ -141,13 +141,14 @@ struct TaskRow: View {
 struct LookSwitch: View {
     @ObservedObject var settings = Settings.shared
 
-    private func option(_ title: String, _ icon: String, _ on: Bool, animated: Bool) -> some View {
-        Button {
-            if settings.animatedMode != animated { settings.animatedMode = animated }
+    private func option(_ o: FigureOption) -> some View {
+        let on = settings.figure == o.id
+        return Button {
+            if !on { settings.figure = o.id }
         } label: {
             HStack(spacing: 6) {
-                Image(systemName: icon).font(.system(size: 13, weight: .semibold))
-                Text(title).font(.callout.weight(.semibold))
+                Image(systemName: o.icon).font(.system(size: 13, weight: .semibold))
+                Text(o.title).font(.callout.weight(.semibold)).lineLimit(1)
             }
             .frame(maxWidth: .infinity)
             .padding(.vertical, 7)
@@ -160,12 +161,11 @@ struct LookSwitch: View {
 
     var body: some View {
         HStack(spacing: 4) {
-            option("表情头像", "face.smiling", !settings.animatedMode, animated: false)
-            option("可动小人", "figure.wave", settings.animatedMode, animated: true)
+            ForEach(FigureOption.available) { option($0) }
         }
         .padding(3)
         .background(RoundedRectangle(cornerRadius: 10).fill(Color.secondary.opacity(0.12)))
-        .animation(.easeOut(duration: 0.15), value: settings.animatedMode)
+        .animation(.easeOut(duration: 0.15), value: settings.figure)
         .help("一键切换大小姐的形象")
     }
 }
@@ -191,10 +191,11 @@ struct PanelView: View {
             heatmapSection
             Divider()
             header
-            if LadySprite.available { LookSwitch() }
+            if FigureOption.available.count > 1 { LookSwitch() }
             usageSection
-            if model.hasSecondary { secondarySection }
-            if let c = model.codex { codexSection(c) }
+            PeerSection(peers: model.peers, extraSummary: secondarySummary) {
+                if model.hasSecondary { secondarySection }
+            }
             Divider()
             tasksSection
             Divider()
@@ -230,8 +231,13 @@ struct PanelView: View {
                 .resizable().interpolation(.high).aspectRatio(contentMode: .fit)
                 .frame(width: 46, height: 46)
                 .contentShape(Rectangle())
-                .onTapGesture { if LadySprite.available { Settings.shared.animatedMode.toggle() } }
-                .help(LadySprite.available ? "点头像切换形象" : "")
+                .onTapGesture {
+                    let opts = FigureOption.available.map(\.id)
+                    if opts.count > 1, let i = opts.firstIndex(of: Settings.shared.figure) {
+                        Settings.shared.figure = opts[(i + 1) % opts.count]
+                    }
+                }
+                .help(FigureOption.available.count > 1 ? "点头像切换形象" : "")
             VStack(alignment: .leading, spacing: 2) {
                 HStack(spacing: 6) {
                     Text("Claude大小姐").font(.headline)
@@ -289,37 +295,10 @@ struct PanelView: View {
     }
 
     /// Codex (ChatGPT) limits read from ~/.codex logs; click to open ChatGPT.
-    private func codexSection(_ c: CodexLimits) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack(spacing: 6) {
-                Image(systemName: "sparkles").foregroundStyle(Color(red: 0.43, green: 0.36, blue: 0.86))
-                Text("ChatGPT · Codex 额度").font(.subheadline.weight(.semibold))
-                if let plan = c.plan { Text(plan).font(.caption).foregroundStyle(.secondary) }
-                Spacer()
-                Text("\(Fmt.when(c.observedAt)) 的数据").font(.caption2).foregroundStyle(.tertiary)
-            }
-            HStack(spacing: 14) {
-                VStack(alignment: .leading, spacing: 2) {
-                    UsageBar(title: "5 小时", window: c.fiveHour, now: model.now, compact: true)
-                    Text(c.fiveHour?.resetsAt.map { "\(Fmt.when($0)) 重置" } ?? "已重置").font(.caption2).foregroundStyle(.secondary)
-                }
-                VStack(alignment: .leading, spacing: 2) {
-                    UsageBar(title: "每周", window: c.weekly, now: model.now, compact: true)
-                    Text(c.weekly?.resetsAt.map { "\(Fmt.when($0)) 重置" } ?? "已重置").font(.caption2).foregroundStyle(.secondary)
-                }
-            }
-        }
-        .padding(10)
-        .background(RoundedRectangle(cornerRadius: 8).fill(Color(red: 0.43, green: 0.36, blue: 0.86).opacity(0.08)))
-        .contentShape(Rectangle())
-        .onTapGesture {
-            for id in ["com.openai.codex", "com.openai.chat"] {
-                if let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: id) {
-                    NSWorkspace.shared.openApplication(at: url, configuration: .init()); break
-                }
-            }
-        }
-        .help("点击打开 ChatGPT")
+    /// "另一个账号 18%" for the collapsed header.
+    private var secondarySummary: String? {
+        guard model.hasSecondary else { return nil }
+        return "另一个账号 " + (model.secondary?.fiveHour.map { "\(Int($0.utilization.rounded()))%" } ?? "—")
     }
 
     private var secondarySection: some View {

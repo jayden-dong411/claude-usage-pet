@@ -59,15 +59,16 @@
 - 颜色跟随系统浅色 / 深色模式；可以拖到任意位置。
 - **互动**：双击她会跳一下；用鼠标在她身上来回蹭几下会害羞（脸红、「别、别摸了啦…」）。
 
-### 菜单栏图标（Mac 版）
-- 菜单栏显示大小姐的表情和 `5h 63%`，有会话等你时前面加 ⏳；就算 Claude 不在前台也能随时看用量。
-- 左键打开和点大小姐一样的面板，右键是完整菜单。可在设置里关掉。
+### 菜单栏：AI 额度总览（Mac 版）
+- 菜单栏显示大小姐的表情和各家额度，例如 `✳︎ 64%  ✦ 16%  ⚡ 43%  🐟 ¥16.96`：Claude 5 小时、Codex 5 小时、Grok Bot 本周、DeepSeek 余额（本机用过哪家就显示哪家）。专注时改为显示倒计时。
+- 左键打开总览：每家一张额度卡片、专注番茄钟按钮；右键是大小姐的完整菜单。可在设置里关掉。
 
 ### 专注番茄钟和健康提醒（Mac 版）
 - 右键「🍅 开始专注 25 分钟」（时长可在设置里调）：专注期间她安静地陪你工作，胶囊和菜单栏显示倒计时；时间到会响一声提醒你休息 5 分钟，休息结束再提醒一次。
 - **久坐提醒**：连续使用 2 小时提醒起来活动、喝口水，之后每 30 分钟一次（离开键盘 5 分钟或 10 分钟没用 Claude 就重新计时）。
 - **熬夜提醒**：凌晨 0–5 点还在用时，每小时提醒一次睡觉。
 - 提醒会让她临时出现在任何应用上方十几秒；两个提醒都能在设置里单独关掉。
+- 如果这台 Mac 上还运行着同一套代码做的其他桌宠（见下方「和其他桌宠一起用」），番茄钟和提醒会在它们之间同步，菜单栏也只保留一个图标。
 
 ### 点击后的面板
 
@@ -75,9 +76,12 @@
 
 - **每日 Token 热力图**：仿 GitHub 贡献图，近 22 周、一列一周，颜色越深用得越多；悬停看当天的 token、使用时长和回复数，点击打开完整统计。
 - **5 小时限额和每周限额**：百分比、重置时间，以及 **用量预测**——根据最近的增长速度估算"按这个速度几点用完"；5 小时限额下面有本时段的用量曲线。
-- **另一个账号**：可以再登录一个 claude.ai 账号，两个账号的限额同时显示。
+- **其他额度**（默认折叠成一行摘要，点开看详情）：
+  - **另一个账号**：可以再登录一个 claude.ai 账号，两个账号的限额同时显示；
+  - **ChatGPT · Codex**（Mac 版）：从本机 Codex 会话记录里读出的 5 小时 / 每周额度；
+  - **Grok Bot**（Mac 版）：Grok Bot 桌面版缓存在本机的每周额度；
+  - **DeepSeek**（Mac 版）：DeepSeek Harness 记在本机的账户余额、今天和近 7 天的花费。
 - **所有 Claude Code 会话**：进行中 / 等你确认 / 空闲、所在项目、持续时间、步骤进度条。**点击会话直接在 Claude 里打开它。**
-- **ChatGPT · Codex 额度**（Mac 版，用过 Codex 才会出现）：从本机 Codex 会话记录里读出的 5 小时 / 每周额度。
 
 <br clear="right">
 
@@ -97,7 +101,15 @@
 
 <img src="docs/screenshots/settings.png" width="360" alt="设置">
 
-大小、透明度、表情轮换间隔、是否偶尔说话、只在 Claude 前台时显示、Claude 全屏时隐藏、菜单栏图标、会话等你时提醒、久坐提醒、熬夜提醒、专注时长。
+大小、透明度、表情轮换间隔、形象、是否偶尔说话、只在 Claude 前台时显示、Claude 全屏时隐藏、会话等你时提醒；以及菜单栏总览、久坐提醒、熬夜提醒、专注时长（这四项和其他桌宠共用）。
+
+### v3 小人（Mac 版）
+
+大小姐的第三种形象：Claude娘设定图里的 **8 种表情立绘**（自然微笑、平静、惊讶、害羞、鼓腮、闭眼轻笑、认真、委屈），按状态换表情——有任务在跑是认真脸，会话等你是惊讶脸，额度紧张鼓腮、快用完委屈，摸头害羞，任务完成闭眼笑。平时不晃动，只在反应时短暂跳一下或抖一下。
+
+<img src="docs/screenshots/pet-v3.png" width="220" alt="v3 小人（演示数据）">
+
+素材来自 [lmy414/ai-chan-sheets](https://github.com/lmy414/ai-chan-sheets)（Claude娘设定图，角色设定 ZipZipPipe，CC BY-NC-SA 4.0），本项目用 `Tools/make_v3_assets.py` 去掉白底、缩小尺寸后放在 `Assets/v3/`，随安装包一起发布。在面板的切换条（表情头像 / 可动小人 / v3 小人）、点头像、右键菜单或设置里切换。
 
 ### 可动小人模式（可选，仅 Mac 版）
 
@@ -129,7 +141,9 @@
 | **右键** | 菜单：开始专注、用量统计、立即刷新、重新读取桌面版登录、登录 / 切换 claude.ai 账号、添加或移除另一个账号、设置、开机自动启动、回到右下角、素材署名、退出 |
 | 面板里**点会话** | 在 Claude 桌面版里打开那个会话；终端里的会话会打开它的项目文件夹 |
 | 面板里**点热力图**或「用量统计」 | 打开 Dashboard |
-| 面板里**点切换条或头像** | 在表情头像和可动小人之间切换（需要本机有小人素材） |
+| 面板里**点切换条或头像** | 在表情头像、可动小人（需要本机有小人素材）和 v3 小人之间切换 |
+| 面板里**点「其他额度」** | 展开 / 收起另一个账号和其他工具的额度 |
+| 菜单栏图标 | 左键：AI 额度总览；右键：大小姐的菜单 |
 
 **表情和情绪是怎么来的**
 
@@ -155,10 +169,16 @@
 | 任务步骤进度 | 会话记录里的任务清单（update_plan / TodoWrite） |
 | 每日 token 和使用时长 | `~/.claude/projects/**/*.jsonl` 会话记录：token 取每条回复的 `usage`（按消息 id 去重）；使用时长按同一会话中相邻记录间隔 ≤ 5 分钟累计 |
 | Codex 额度和用量（Mac 版） | `~/.codex/sessions/**/rollout-*.jsonl`（ChatGPT 桌面版和 Codex CLI 写的本地记录）：额度取最新的 `rate_limits`，token 取累计 `token_count` 的增量 |
-| 共享给其他本机应用 | Mac 版把最新的 Claude 额度写进 `~/Library/Application Support/ClaudeDaxiaojie/latest-claude-usage.json`（只有百分比、重置时间和套餐名），方便别的本机小工具读取 |
+| Grok Bot 额度（Mac 版） | Grok Bot 桌面版的本地缓存 `~/Library/Application Support/Grok Bot/sand-client-persistence/` 里的 `weekly-usage.cache`（每周已用百分比、重置时间、套餐名；Grok Bot 打开时才会更新） |
+| DeepSeek 余额（Mac 版） | DeepSeek Harness 的 `~/.dsh/.dshw-usage.json`（余额、每天花费；不读 API 密钥，不联网） |
+| 和其他桌宠共享 | Mac 版把最新的 Claude 额度（只有百分比、重置时间和套餐名）写进 `~/Library/Application Support/AIPets/claude.json`；番茄钟状态在同目录的 `hub.json`；共用设置在 `local.aipets.shared` |
 | 本地缓存 | Mac：`~/Library/Application Support/ClaudeDaxiaojie/`；Windows：`%APPDATA%\ClaudeUsagePet\`（用量历史、统计缓存、设置） |
 
 只统计这台电脑上的 Claude Code（桌面版和终端都算）和 Codex，不包括其他设备、网页版聊天。
+
+### 和其他桌宠一起用
+
+作者本机还用同一套代码给 ChatGPT、Grok Bot、DeepSeek Harness 各做了一只桌宠（因为素材授权原因不在这个仓库里）。共用的部分在 `Sources/PetHub.swift`（菜单栏、番茄钟、提醒的协调）、`Sources/Peers.swift`（各家额度）、`Sources/V3Figure.swift`、`Sources/PetChrome.swift`：同时运行时，按「Claude大小姐 → GPT龙娘 → Grok娘 → DeepSeek娘」的顺序由第一只在运行的桌宠显示菜单栏图标并负责计时；提醒由当前前台应用对应的那只桌宠弹出。只装大小姐时这些都不影响使用。
 
 ---
 
@@ -217,8 +237,15 @@ Sources/
   Heatmap.swift        每日 Token 热力图、图表配色
   DashboardView.swift  用量统计窗口
   Settings.swift       设置和深浅色配色
+  CodexSide.swift      Codex 的每日用量统计
+  V3Figure.swift       v3 小人：按状态切换 8 种表情
+  Peers.swift          Codex / Grok Bot / DeepSeek 的额度读取和「其他额度」卡片
+  PetHub.swift         菜单栏总览、番茄钟和提醒（多只桌宠之间同步）
+  PetChrome.swift      桌宠窗口里的视图（点击、双击、摸头、拖动）
 Tools/strip_outline.swift   构建时去掉贴图白边
+Tools/make_v3_assets.py     从 ai-chan-sheets 设定图切出 v3 表情并去掉白底
 Assets/daxiaojie/head/      80 张表情（CC BY-NC-SA 4.0）
+Assets/v3/                  v3 小人的 8 张表情（CC BY-NC-SA 4.0）
 ```
 
 ---
@@ -248,5 +275,6 @@ Assets/daxiaojie/head/      80 张表情（CC BY-NC-SA 4.0）
 ## 署名与许可
 
 - **代码**：[MIT License](LICENSE)。
+- **v3 小人**（`Assets/v3/`）：Claude娘设定图的 8 种表情 · 设定图：[lmy414/ai-chan-sheets](https://github.com/lmy414/ai-chan-sheets) · 角色设定：ZipZipPipe · [CC BY-NC-SA 4.0](https://creativecommons.org/licenses/by-nc-sa/4.0/deed.zh-hans)。本项目去掉了白底、缩小了尺寸，按同一协议发布，**不能用于商业用途**。
 - **形象图片**（`Assets/daxiaojie/`）：素材：Claude大小姐的日记本（[github.com/opsCar/claude-daxiaojie-assets](https://github.com/opsCar/claude-daxiaojie-assets)）· 角色设定：ZipZipPipe（胖次狐）· 设定图：lmy414/ai-chan-sheets · [CC BY-NC-SA 4.0](https://creativecommons.org/licenses/by-nc-sa/4.0/deed.zh-hans)。本项目只缩小了尺寸并在构建时去掉白色外框，按同一协议发布，**不能用于商业用途**。
 - 「Claude」是 Anthropic 的商标；本项目是非官方的粉丝作品。
