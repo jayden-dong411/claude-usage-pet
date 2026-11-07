@@ -20,7 +20,20 @@
 | 系统 | 文件 | 状态 |
 |---|---|---|
 | macOS 14 及以上（Intel 和 Apple 芯片通用） | `ClaudeUsagePet-…-macOS.zip` | ✅ 可用 |
-| Windows | — | 🚧 计划中（当前版本基于 macOS 原生框架，Windows 版需要单独开发） |
+| Windows 10 / 11（64 位） | `ClaudeUsagePet-Setup-…-win-x64.exe`（安装版）<br>`ClaudeUsagePet-…-win-x64-portable.zip`（免安装） | 🧪 测试版 |
+
+> Windows 版是用 Electron 重写的，功能和 Mac 版一致，但作者还没在 Windows 真机上完整测试过，遇到问题欢迎提 [Issue](../../issues)。
+
+## 安装（Windows）
+
+1. 下载 `ClaudeUsagePet-Setup-…-win-x64.exe`，双击安装（可以选择安装位置）。不想安装的话，下载 `…-portable.zip`，解压后直接运行 `ClaudeUsagePet.exe`。
+2. **第一次运行**：程序没有数字签名，Windows 可能提示"Windows 已保护你的电脑"。点 **「更多信息」→「仍要运行」**。
+3. 大小姐会出现在屏幕右下角，任务栏右下角的托盘里也有她的图标（右键托盘图标可以打开面板、设置或退出）。
+4. 用量会依次尝试：读取 Claude 桌面版的登录 → 读取 Claude Code 的登录（`%USERPROFILE%\.claude\.credentials.json`）→ 都不行时，在面板里点 **「登录 claude.ai 查看用量」** 单独登录一次（之后会记住）。
+
+> Windows 版另外支持：**系统通知**——大小姐隐藏时（Claude 不在前台），任务完成或需要你批准会弹出 Windows 通知。
+
+<p align="center"><img src="docs/screenshots/windows-panel.png" width="300" alt="Windows 版面板（演示数据）"></p>
 
 ## 安装（macOS）
 
@@ -102,11 +115,11 @@
 
 | 内容 | 来源 |
 |---|---|
-| 账号用量（5 小时 / 每周） | 依次尝试：① Claude 桌面版的 claude.ai 登录（读取它的 cookie，需要一次钥匙串授权，只读）；② 钥匙串里 Claude Code 的登录令牌（只读，过期就跳过）；③ 在应用里单独登录的 claude.ai。查询的是 claude.ai 自己的用量接口。 |
+| 账号用量（5 小时 / 每周） | 依次尝试：① Claude 桌面版的 claude.ai 登录（读取它的 cookie，只读；Mac 需要一次钥匙串授权，Windows 用系统的 DPAPI 解密）；② Claude Code 的登录令牌（Mac 在钥匙串，Windows 在 `%USERPROFILE%\.claude\.credentials.json`；只读，过期就跳过）；③ 在应用里单独登录的 claude.ai。查询的是 claude.ai 自己的用量接口。 |
 | 正在进行的任务 | `~/.claude/sessions/*.json`（每个 Claude Code 会话都会写，含状态 busy / waiting / idle） |
 | 任务步骤进度 | 会话记录里的任务清单（update_plan / TodoWrite） |
 | 每日 token 和使用时长 | `~/.claude/projects/**/*.jsonl` 会话记录：token 取每条回复的 `usage`（按消息 id 去重）；使用时长按同一会话中相邻记录间隔 ≤ 5 分钟累计 |
-| 本地缓存 | `~/Library/Application Support/ClaudeDaxiaojie/`（用量历史、统计缓存） |
+| 本地缓存 | Mac：`~/Library/Application Support/ClaudeDaxiaojie/`；Windows：`%APPDATA%\ClaudeUsagePet\`（用量历史、统计缓存、设置） |
 
 只统计这台电脑上的 Claude Code（桌面版和终端都算），不包括其他设备、网页版聊天。
 
@@ -127,6 +140,28 @@ open build/Claude大小姐.app
 `build.sh` 会编译 Intel + Apple 芯片的通用版本，检查 80 个表情都被用上，并去掉贴图的白色外框。
 
 检查界面：`build/Claude大小姐.app/Contents/MacOS/DoroPet --snapshot <目录> [--demo] [--wait 秒]` 会离屏输出各界面的截图后退出（`--demo` 使用演示数据）。
+
+### Windows 版（Electron）
+
+源码在 `windows/`，功能和 Mac 版一一对应。Windows 安装包可以直接在 Mac 上交叉打包：
+
+```bash
+cd windows
+npm install                     # 安装 Electron、electron-builder、sql.js
+./prepare-assets.sh             # 生成去白边的 80 张表情和图标（用到 Mac 上的 Swift 工具）
+npm start                       # 在本机直接运行（Mac 上也能跑，用来调试界面）
+npm run snapshot                # 用演示数据离屏输出各界面截图
+npm run dist:win                # 生成 ../dist/windows/ 下的安装版 exe 和免安装 zip
+```
+
+| 文件 | 作用 |
+|---|---|
+| `main.js` | 窗口、托盘、菜单、数据刷新、表情轮换、只在 Claude 前台时显示 |
+| `lib/usage.js` | 用量接口；Windows 上用 DPAPI + AES-GCM 读取 Claude 桌面版的登录 |
+| `lib/foreground.js` | 用常驻 PowerShell 检测前台程序和是否全屏 |
+| `lib/sessions.js` / `lib/indexer.js` / `lib/history.js` | 会话与步骤进度、每日统计、用量预测（和 Mac 版同一套规则） |
+| `lib/expressions.js` | 表情分组（由 `Sources/Expressions.swift` 生成） |
+| `renderer/` | 桌宠、面板、用量统计、设置四个界面 |
 
 ### 目录结构
 
@@ -160,11 +195,16 @@ Assets/daxiaojie/head/      80 张表情（CC BY-NC-SA 4.0）
 
 **点会话只打开了 Claude，没跳到那个会话？** 这个功能依赖 Claude 桌面版的 `claude://` 链接，请把 Claude 更新到最新版本。
 
+**Windows 上用量读不到桌面版登录？** Claude 桌面版运行时可能会锁住它的 cookie 文件，这时会自动退回到下一种方式。在面板里点「登录 claude.ai 查看用量」登录一次即可，之后会记住。
+
+**Windows 上大小姐不出现？** 默认只在 Claude 窗口在前台时显示。可以从任务栏托盘图标打开面板，或在设置里关掉「只在 Claude 在前台时显示」。
+
 ---
 
 ## 计划
 
-- [ ] Windows 版本
+- [x] Windows 版本（测试版）
+- [ ] Windows 版在真机上的完整测试
 - [ ] 正式签名和公证，免去首次打开的手动步骤
 
 ## 署名与许可

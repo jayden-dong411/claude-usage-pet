@@ -1,0 +1,156 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>Claude Code 用量统计</title>
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'">
+<link rel="stylesheet" href="common.css">
+<style>
+  body { background: var(--bg-soft); }
+  #root { padding: 20px; display: flex; flex-direction: column; gap: 16px; max-width: 1100px; margin: 0 auto; }
+  h1 { font-size: 21px; margin: 0; }
+  h2 { font-size: 15px; margin: 0; }
+  h3 { font-size: 13px; margin: 0; font-weight: 600; }
+  .tiles { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; }
+  .tile { display: flex; gap: 10px; align-items: flex-start; }
+  .ico { width: 26px; height: 26px; border-radius: 50%; display: grid; place-items: center; font-size: 13px; flex: none; }
+  .tile .v { font-size: 18px; font-weight: 600; font-variant-numeric: tabular-nums; margin: 2px 0; white-space: nowrap; }
+  .tile .k, .tile .s { font-size: 11px; color: var(--text-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .chart { position: relative; }
+  .chart svg text { fill: var(--text-2); font-size: 11px; }
+  .tip { position: absolute; pointer-events: none; background: var(--bg); border: 1px solid var(--card-stroke); border-radius: 8px;
+         padding: 6px 8px; font-size: 11px; box-shadow: 0 4px 14px rgba(0,0,0,.12); white-space: nowrap; transform: translate(-50%, -100%); }
+  .tip b { font-size: 12px; }
+  .two { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .rank { display: flex; flex-direction: column; gap: 10px; margin-top: 10px; }
+  .rank .r { display: flex; gap: 8px; font-size: 13px; }
+  .rank .bar { height: 5px; margin-top: 4px; background: var(--track); }
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script src="common.js"></script>
+<script>
+  const root = document.getElementById('root');
+  let S = null, range = 14, metric = 'total';
+  const METRICS = { total: ['全部', (t) => U.total(t)], io: ['输入+输出', (t) => t.input + t.output], cacheWrite: ['缓存写入', (t) => t.cacheWrite], cacheRead: ['缓存读取', (t) => t.cacheRead] };
+  U.wireHeatmap(root, 'dash-heat');
+
+  function merge(list) {
+    const out = { tokens: { input: 0, output: 0, cacheWrite: 0, cacheRead: 0 }, messages: 0, activeSeconds: 0, sessions: new Set(), models: {}, projects: {} };
+    for (const { stats: d } of list) {
+      if (!d) continue;
+      for (const k in out.tokens) out.tokens[k] += d.tokens[k];
+      out.messages += d.messages; out.activeSeconds += d.activeSeconds;
+      d.sessions.forEach((x) => out.sessions.add(x));
+      for (const [m, t] of Object.entries(d.models)) out.models[m] = (out.models[m] || 0) + U.total(t);
+      for (const [p, v] of Object.entries(d.projects)) {
+        const o = out.projects[p] || (out.projects[p] = { tokens: 0, secs: 0 });
+        o.tokens += U.total(v.tokens); o.secs += v.activeSeconds;
+      }
+    }
+    return out;
+  }
+
+  /** Round tick step (1, 2, 2.5 or 5 × 10^k) so axis labels read cleanly. */
+  function niceStep(v, ticks = 3) {
+    if (v <= 0) return 1;
+    const raw = v / ticks, p = Math.pow(10, Math.floor(Math.log10(raw)));
+    return [1, 2, 2.5, 5, 10].map((m) => m * p).find((s) => s >= raw);
+  }
+
+  function barChart(id, series, valueOf, color, fmtY, tipOf, height) {
+    const el = document.getElementById(id);
+    const W = el.clientWidth || 800, H = height, padL = 6, padR = 56, padT = 10, padB = 24;
+    const vals = series.map(valueOf), stepV = niceStep(Math.max(...vals, 0)), ticks = Math.max(1, Math.ceil(Math.max(...vals, 0) / stepV)), max = stepV * ticks;
+    const n = series.length, slot = (W - padL - padR) / n, bw = Math.max(3, slot * 0.62);
+    const y = (v) => padT + (H - padT - padB) * (1 - v / max);
+    let svg = `<svg width="${W}" height="${H}">`;
+    for (let i = 0; i <= ticks; i++) {
+      const v = stepV * i, yy = y(v);
+      svg += `<line x1="${padL}" x2="${W - padR}" y1="${yy}" y2="${yy}" stroke="var(--track)" stroke-width="1"/><text x="${W - padR + 8}" y="${yy + 4}">${fmtY(v)}</text>`;
+    }
+    const step = n > 14 ? 5 : n > 7 ? 2 : 1;
+    series.forEach((d, i) => {
+      const x = padL + slot * i + (slot - bw) / 2, v = vals[i], yy = y(v), h = Math.max(0, H - padB - yy);
+      const r = Math.min(4, bw / 2, h);
+      if (h > 0) svg += `<path d="M${x},${H - padB}V${yy + r}Q${x},${yy} ${x + r},${yy}H${x + bw - r}Q${x + bw},${yy} ${x + bw},${yy + r}V${H - padB}Z" fill="${color}" data-i="${i}" class="b"/>`;
+      svg += `<rect x="${padL + slot * i}" y="${padT}" width="${slot}" height="${H - padT - padB}" fill="transparent" data-i="${i}"/>`;
+      if (i % step === 0 || i === n - 1 && n <= 7) svg += `<text x="${x + bw / 2}" y="${H - 6}" text-anchor="middle">${d.date.getMonth() + 1}/${d.date.getDate()}</text>`;
+    });
+    svg += '</svg><div class="tip" style="display:none"></div>';
+    el.innerHTML = svg;
+    const tip = el.querySelector('.tip');
+    el.onmousemove = (e) => {
+      const i = e.target.dataset?.i;
+      el.querySelectorAll('.b').forEach((b) => b.setAttribute('opacity', i === undefined || b.dataset.i === i ? 1 : 0.35));
+      if (i === undefined) { tip.style.display = 'none'; return; }
+      const d = series[+i];
+      tip.innerHTML = `<div class="muted">${d.date.getMonth() + 1}月${d.date.getDate()}日 周${'日一二三四五六'[d.date.getDay()]}</div>${tipOf(d)}`;
+      tip.style.display = 'block';
+      tip.style.left = `${padL + slot * (+i + 0.5)}px`;
+      tip.style.top = `${Math.max(46, y(vals[+i]) - 6)}px`;
+    };
+    el.onmouseleave = () => { tip.style.display = 'none'; el.querySelectorAll('.b').forEach((b) => b.setAttribute('opacity', 1)); };
+  }
+
+  function rank(title, rows) {
+    rows = rows.filter((r) => r[1] > 0).sort((a, b) => b[1] - a[1]).slice(0, 8);
+    const max = Math.max(1, ...rows.map((r) => r[1]));
+    return `<div class="card"><h3>${title}</h3><div class="rank">${rows.length ? rows.map((r) => `<div>
+      <div class="r"><span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${U.esc(r[0])}</span>${r[2] != null ? `<span class="muted" style="font-size:11px">${U.hours(r[2])}</span>` : ''}<b class="mono">${U.cn(r[1])}</b></div>
+      <div class="bar"><i style="width:${Math.max(1, (r[1] / max) * 100)}%;background:var(--tokens)"></i></div></div>`).join('') : '<span class="muted">暂无数据</span>'}</div></div>`;
+  }
+
+  function render() {
+    if (!S) return;
+    const series = U.series(S.days, range), tot = merge(series);
+    const today = S.days[U.dayKey(new Date())] || { tokens: { input: 0, output: 0, cacheWrite: 0, cacheRead: 0 }, messages: 0, activeSeconds: 0, sessions: [] };
+    const tile = (ico, tint, k, v, s) => `<div class="card tile"><span class="ico" style="background:color-mix(in srgb, ${tint} 16%, transparent);color:${tint}">${ico}</span>
+      <div style="min-width:0"><div class="k">${k}</div><div class="v">${v}</div><div class="s">${s}</div></div></div>`;
+    const seg = (name, opts, cur) => `<div class="seg" data-seg="${name}">${opts.map(([v, l]) => `<button data-v="${v}" class="${String(v) === String(cur) ? 'on' : ''}">${l}</button>`).join('')}</div>`;
+    root.innerHTML = `
+      <div class="row" style="align-items:flex-start"><div><h1>Claude Code 用量统计</h1>
+        <div class="muted" style="margin-top:3px">最近 ${range} 天 · ${U.hours(tot.activeSeconds)} · ${U.cn(U.total(tot.tokens))} token · ${tot.sessions.size} 个会话</div></div>
+        <span class="spacer"></span><span class="muted" style="font-size:12px">${S.indexing ? (S.lastIndexed ? '更新中…' : `首次统计 ${Math.round(S.indexProgress * 100)}%`) : S.lastIndexed ? '更新于 ' + U.clock(S.lastIndexed) : ''}</span>
+        <button class="link" data-act="refreshIndex" title="重新统计">⟳</button></div>
+      <div class="card"><div class="row"><h3>每日 Token</h3><span class="faint" style="font-size:12px">颜色越深用得越多，悬停看当天详情</span></div>
+        <div style="margin-top:10px">${U.heatmap(S.days, { weeks: 38, cell: 13, gap: 4, hoverId: 'dash-heat' })}</div></div>
+      <h2>今天</h2>
+      <div class="tiles">
+        ${tile('◷', 'var(--time)', '使用时长', U.hours(today.activeSeconds), `${today.sessions.length} 个会话`)}
+        ${tile('🔥', 'var(--tokens)', '总 Token', U.cn(U.total(today.tokens)), `${today.messages} 次回复`)}
+        ${tile('✎', 'var(--tokens)', '输入 + 输出', U.cn(today.tokens.input + today.tokens.output), `输出 ${U.cn(today.tokens.output)}`)}
+        ${tile('▤', 'var(--tokens)', '缓存', U.cn(today.tokens.cacheRead + today.tokens.cacheWrite), `读 ${U.cn(today.tokens.cacheRead)} · 写 ${U.cn(today.tokens.cacheWrite)}`)}
+      </div>
+      <div class="row"><h2>趋势</h2><span class="spacer"></span>${seg('range', [[7, '7 天'], [14, '14 天'], [30, '30 天']], range)}</div>
+      <div class="card"><div class="row"><h3>每天 Token</h3><span class="spacer"></span>${seg('metric', Object.entries(METRICS).map(([k, v]) => [k, v[0]]), metric)}</div>
+        <div class="chart" id="tok" style="margin-top:10px"></div></div>
+      <div class="card"><h3>每天使用时长</h3><div class="chart" id="time" style="margin-top:10px"></div></div>
+      <div class="two">${rank('按模型', Object.entries(tot.models))}${rank('按项目', Object.entries(tot.projects).map(([k, v]) => [k, v.tokens, v.secs]))}</div>
+      <div class="faint" style="font-size:11px">数据来自这台电脑上 ~/.claude/projects 里的 Claude Code 会话记录（桌面版和终端都算），不含其他设备。使用时长按同一会话里相邻两条记录间隔不超过 5 分钟累计。</div>`;
+    const [label, fn] = METRICS[metric];
+    barChart('tok', series, (d) => (d.stats ? fn(d.stats.tokens) : 0), 'var(--tokens)', (v) => U.cn(v),
+      (d) => `<b>${label} ${U.cn(d.stats ? fn(d.stats.tokens) : 0)}</b><div class="muted">${d.stats ? d.stats.messages : 0} 次回复</div>`, 210);
+    barChart('time', series, (d) => (d.stats ? d.stats.activeSeconds / 3600 : 0), 'var(--time)', (v) => `${v.toFixed(v < 3 ? 1 : 0)} 时`,
+      (d) => `<b>${U.hours(d.stats ? d.stats.activeSeconds : 0)}</b><div class="muted">${d.stats ? d.stats.sessions.length : 0} 个会话</div>`, 160);
+  }
+
+  root.addEventListener('click', (e) => {
+    const b = e.target.closest('button');
+    if (!b) return;
+    const seg = b.parentElement?.dataset?.seg;
+    if (seg === 'range') { range = +b.dataset.v; render(); }
+    else if (seg === 'metric') { metric = b.dataset.v; render(); }
+    else if (b.dataset.act) window.pet.act(b.dataset.act);
+  });
+  window.addEventListener('resize', render);
+  let lastKey = '';
+  window.pet.onState((s) => {
+    const key = `${s.lastIndexed}|${s.indexing}|${Math.round(s.indexProgress * 100)}`;
+    S = s;
+    if (key !== lastKey) { lastKey = key; render(); }
+  });
+</script>
+</body>
+</html>

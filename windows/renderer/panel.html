@@ -1,0 +1,128 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'">
+<link rel="stylesheet" href="common.css">
+<style>
+  body { background: var(--bg); }
+  #root { padding: 16px; display: flex; flex-direction: column; gap: 14px; }
+  hr { border: 0; border-top: 1px solid var(--card-stroke); margin: 0; width: 100%; }
+  h3 { margin: 0; font-size: 13px; font-weight: 600; }
+  .head img { width: 46px; height: 46px; object-fit: contain; }
+  .badge { font-size: 11px; font-weight: 600; padding: 1px 6px; border-radius: 99px; background: rgba(242,133,41,.18); color: var(--accent-deep); }
+  @media (prefers-color-scheme: dark) { .badge { color: #f5a764; } }
+  .limit .top { display: flex; justify-content: space-between; font-weight: 600; margin-bottom: 4px; }
+  .limit .sub { font-size: 11px; color: var(--text-2); margin-top: 4px; }
+  .fc { font-size: 11px; margin-top: 3px; color: var(--text-2); }
+  .fc.warn { color: var(--alert); }
+  .box { padding: 10px; border-radius: 8px; background: var(--card); }
+  .task { display: flex; gap: 10px; align-items: flex-start; cursor: pointer; padding: 2px 0; }
+  .task:hover .name { text-decoration: underline; text-decoration-color: var(--text-3); }
+  .dot { width: 8px; height: 8px; border-radius: 50%; margin-top: 5px; flex: none; }
+  .name { font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .meta { font-size: 11px; color: var(--text-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .prog { display: flex; gap: 6px; align-items: center; font-size: 11px; margin-top: 3px; }
+  .prog .bar { width: 70px; height: 4px; }
+  .right { text-align: right; font-size: 11px; flex: none; }
+  .tasks { display: flex; flex-direction: column; gap: 10px; max-height: 300px; overflow-y: auto; }
+  .foot { font-size: 11px; color: var(--text-2); }
+  svg.spark { display: block; }
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script src="common.js"></script>
+<script>
+  const root = document.getElementById('root');
+  const act = (n, ...a) => window.pet.act(n, ...a);
+  U.wireHeatmap(root, 'panel-heat');
+
+  function limit(title, w, now, fc) {
+    const u = w ? w.utilization : 0;
+    const f = U.forecastText(fc);
+    return `<div class="limit">
+      <div class="top"><span>${title}</span><span class="mono" style="color:${w ? U.barColor(u) : 'var(--text-3)'}">${w ? Math.round(u) + '%' : '—'}</span></div>
+      <div class="bar"><i style="width:${Math.min(100, u)}%;background:${U.barColor(u)}"></i></div>
+      <div class="sub">${w ? U.resetText(w, now) : '暂无数据'}</div>
+      ${f ? `<div class="fc ${fc.kind === 'runsOut' ? 'warn' : ''}">${fc.kind === 'runsOut' ? '⚠︎ ' : '↗ '}${f}</div>` : ''}
+    </div>`;
+  }
+
+  function spark(pts) {
+    if (!pts || pts.length < 3) return '';
+    const vals = pts.map((p) => p[1]);
+    const lo = Math.max(0, Math.min(...vals) - 5), hi = Math.min(100, Math.max(...vals) + 5), span = Math.max(1, hi - lo);
+    const t0 = pts[0][0], t1 = pts[pts.length - 1][0], W = 270, H = 30;
+    const xy = pts.map(([t, v]) => [((t - t0) / Math.max(1, t1 - t0)) * W, H - ((v - lo) / span) * (H - 3) - 1.5]);
+    const line = xy.map(([x, y], i) => `${i ? 'L' : 'M'}${x.toFixed(1)},${y.toFixed(1)}`).join('');
+    return `<div class="row"><svg class="spark" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}">
+      <defs><linearGradient id="g" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="var(--tokens)" stop-opacity=".28"/><stop offset="1" stop-color="var(--tokens)" stop-opacity=".02"/></linearGradient></defs>
+      <path d="${line}L${W},${H}L0,${H}Z" fill="url(#g)"/><path d="${line}" fill="none" stroke="var(--tokens)" stroke-width="2" stroke-linecap="round"/></svg>
+      <div class="right"><div class="faint" style="font-size:9px">本时段</div><div class="muted mono">${Math.round(vals[0])}% → ${Math.round(vals[vals.length - 1])}%</div></div></div>`;
+  }
+
+  function task(s, now) {
+    const dot = s.isWaiting ? 'var(--alert)' : s.isBusy ? '#ff9500' : 'rgba(52,199,89,.75)';
+    const col = s.isWaiting ? 'var(--alert)' : s.isBusy ? '#ff9500' : 'var(--text-2)';
+    const p = s.progress;
+    const prog = p ? `<div class="prog"><div class="bar"><i style="width:${(p.done / p.total) * 100}%;background:${p.done >= p.total ? 'rgba(52,199,89,.75)' : '#ff9500'}"></i></div>
+      <b class="mono" style="color:${p.done >= p.total ? '#34c759' : '#ff9500'}">${p.done}/${p.total}</b>
+      ${p.current && (s.isBusy || s.isWaiting) ? `<span class="meta">${U.esc(p.current)}</span>` : ''}</div>` : '';
+    return `<div class="task" data-id="${U.esc(s.id)}" title="${s.entrypoint.includes('desktop') ? '在 Claude 里打开这个会话' : U.esc(s.cwd)}">
+      <span class="dot" style="background:${dot}"></span>
+      <div style="flex:1;min-width:0"><div class="name">${U.esc(s.name)}</div><div class="meta">${U.esc(s.folderName)} · ${s.entryLabel}</div>${prog}</div>
+      <div class="right"><div style="font-weight:600;color:${col}">${s.statusLabel}</div><div class="muted mono">${U.duration(now - s.statusSince)}</div></div>
+      <span class="faint" style="margin-top:3px">›</span></div>`;
+  }
+
+  function render(s) {
+    const u = s.usage, now = s.now;
+    const who = u ? [u.account, u.plan].filter(Boolean).join(' · ') : '';
+    const waiting = s.sessions.filter((x) => x.isWaiting).length, busy = s.sessions.filter((x) => x.isBusy).length;
+    let html = `
+      <div><div class="row"><h3>每日 Token</h3><span class="spacer"></span><button class="link" data-act="dashboard">用量统计 ›</button></div>
+        <div style="margin-top:6px;cursor:pointer" data-act="dashboard">${U.heatmap(s.days, { weeks: 22, cell: 10, gap: 3, hoverId: 'panel-heat' })}</div>
+        ${s.indexing && !Object.keys(s.days).length ? `<div class="faint" style="font-size:11px">正在统计会话记录… ${Math.round(s.indexProgress * 100)}%</div>` : ''}</div>
+      <hr>
+      <div class="row head"><img src="../assets/head/${s.face}.png" alt="">
+        <div style="flex:1;min-width:0"><div class="row" style="gap:6px"><b style="font-size:14px">Claude大小姐</b><span class="badge">${s.levelName}</span></div>
+        <div class="meta">${U.esc(who || '大小姐现在：' + s.levelName)}</div></div>
+        <button class="link" style="font-size:16px" data-act="refresh" title="刷新用量">${s.loadingUsage ? '…' : '⟳'}</button></div>
+      ${limit('5 小时限额', u?.fiveHour, now, s.forecast5)}
+      ${spark(s.spark)}
+      ${limit('每周限额（7 天）', u?.sevenDay, now, s.forecast7)}
+      ${(u?.extras || []).map((e) => `<div class="limit"><div class="top" style="font-weight:400;font-size:12px"><span>${e.label}</span><span class="mono">${Math.round(e.window.utilization)}%</span></div><div class="bar thin"><i style="width:${e.window.utilization}%;background:${U.barColor(e.window.utilization)}"></i></div></div>`).join('')}
+      ${s.usageError && (!u || s.needsLogin) ? `<div class="box"><div class="meta" style="white-space:normal">${U.esc(s.usageError)}</div>
+        ${s.needsLogin ? `<button class="btn primary" style="margin-top:6px" data-act="login">登录 claude.ai 查看用量</button>` : ''}</div>` : ''}
+      ${!s.settings.hasSecondary ? `<button class="link" data-act="loginSecond" style="align-self:flex-start">＋ 添加另一个账号</button>` : ''}`;
+    if (s.settings.hasSecondary) {
+      const b = s.secondary;
+      const mini = (t, w) => `<div style="flex:1"><div class="row" style="font-size:12px"><span>${t}</span><span class="spacer"></span><b class="mono" style="color:${w ? U.barColor(w.utilization) : 'var(--text-3)'}">${w ? Math.round(w.utilization) + '%' : '—'}</b></div>
+        <div class="bar thin" style="margin:3px 0"><i style="width:${w ? w.utilization : 0}%;background:${w ? U.barColor(w.utilization) : 'transparent'}"></i></div>
+        <div class="meta">${w?.resetsAt ? U.when(w.resetsAt) + ' 重置' : '未开始计时'}</div></div>`;
+      html += `<div class="box"><div class="row"><b>另一个账号</b><span class="meta">${U.esc(b ? [b.account, b.plan].filter(Boolean).join(' · ') : '')}</span></div>
+        ${b ? `<div class="row" style="gap:14px;margin-top:8px;align-items:flex-start">${mini('5 小时', b.fiveHour)}${mini('每周', b.sevenDay)}</div>`
+            : `<div class="row" style="margin-top:6px"><span class="meta">${U.esc(s.secondaryError || '读取中…')}</span><span class="spacer"></span><button class="btn" data-act="loginSecond">登录</button></div>`}</div>`;
+    }
+    html += `<hr>
+      <div><div class="row"><h3>正在进行的任务</h3><span class="spacer"></span>
+        <span class="meta" style="color:${waiting ? 'var(--alert)' : ''}">${waiting ? `${waiting} 等你 · ` : ''}${busy} 进行中 / ${s.sessions.length} 个会话</span></div>
+        <div class="tasks" style="margin-top:8px">${s.sessions.length ? s.sessions.map((x) => task(x, now)).join('') : '<div class="meta">现在没有 Claude 会话，大小姐在悠闲喝茶～</div>'}</div></div>
+      <hr>
+      <div class="foot"><div class="row"><button class="link" data-act="dashboard">▥ 用量统计</button><button class="link" data-act="settings">⚙ 设置</button><span class="spacer"></span><button class="link" data-act="quit">退出</button></div>
+        <div style="margin-top:6px">${s.lastUsageUpdate ? `${U.esc(u?.source || '')} · 更新于 ${U.clock(s.lastUsageUpdate)}` : '用量尚未获取'}</div>
+        <div class="faint" style="font-size:9px;margin-top:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="${U.esc(s.attribution)}">素材：Claude大小姐的日记本 · 角色设定：ZipZipPipe（胖次狐）· CC BY-NC-SA 4.0</div></div>`;
+    root.innerHTML = html;
+    requestAnimationFrame(() => window.pet.panelSize(root.scrollHeight));
+  }
+
+  root.addEventListener('click', (e) => {
+    const t = e.target.closest('[data-act],[data-id]');
+    if (!t) return;
+    if (t.dataset.id) act('openSession', t.dataset.id); else act(t.dataset.act);
+  });
+  window.pet.onState(render);
+</script>
+</body>
+</html>

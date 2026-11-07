@@ -1,0 +1,88 @@
+:root {
+  color-scheme: light dark;
+  --bg: #ffffff;
+  --bg-soft: #f6f6f4;
+  --card: rgba(0, 0, 0, 0.045);
+  --card-stroke: rgba(0, 0, 0, 0.07);
+  --text: #1c1c1c;
+  --text-2: #6b6a66;
+  --text-3: #9c9a95;
+  --track: rgba(0, 0, 0, 0.08);
+  --accent: #f28529;
+  --accent-deep: #9e521a;
+  --tokens: #eb6834;
+  --time: #2a78d6;
+  --alert: #e0484d;
+  --good: #5cc79e;
+  --amber: #f7b338;
+  --deep: #f26b26;
+  --heat0: #e4e1da;
+  --heat1: #f39a63;
+  --heat2: #eb6834;
+  --heat3: #c4501f;
+  --heat4: #93391a;
+  --pill-bg: rgba(255, 245, 230, 0.95);
+  --pill-text: #733f1a;
+  --pill-border: rgba(242, 158, 77, 0.9);
+  --chip-bg: rgba(255, 255, 255, 0.95);
+  --chip-text: #262626;
+  --chip-border: rgba(255, 148, 0, 0.8);
+  --chip-alert: rgba(230, 64, 64, 0.9);
+  font-family: "Segoe UI", "Microsoft YaHei UI", "Microsoft YaHei", -apple-system, "PingFang SC", sans-serif;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #1f1f1f;
+    --bg-soft: #1c1c1c;
+    --card: rgba(255, 255, 255, 0.05);
+    --card-stroke: rgba(255, 255, 255, 0.08);
+    --text: #f0efec;
+    --text-2: #b4b2ac;
+    --text-3: #807e78;
+    --track: rgba(255, 255, 255, 0.1);
+    --tokens: #d95926;
+    --time: #3987e5;
+    --heat0: #3b3a37;
+    --heat1: #7a3a1a;
+    --heat2: #a8481e;
+    --heat3: #d95926;
+    --heat4: #f08a55;
+    --pill-bg: rgba(43, 38, 33, 0.92);
+    --pill-text: #fccc94;
+    --pill-border: rgba(242, 140, 51, 0.55);
+    --chip-bg: rgba(38, 38, 38, 0.92);
+    --chip-text: #ededed;
+    --chip-border: rgba(255, 148, 0, 0.5);
+    --chip-alert: rgba(255, 97, 89, 0.8);
+  }
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; padding: 0; }
+body { color: var(--text); font-size: 13px; -webkit-font-smoothing: antialiased; user-select: none; }
+button { font: inherit; color: inherit; cursor: pointer; }
+.muted { color: var(--text-2); }
+.faint { color: var(--text-3); }
+.mono { font-variant-numeric: tabular-nums; }
+.row { display: flex; align-items: center; gap: 8px; }
+.spacer { flex: 1; }
+.card { background: var(--card); border: 1px solid var(--card-stroke); border-radius: 12px; padding: 14px; }
+.link { background: none; border: 0; padding: 0; color: var(--text-2); font-size: 12px; }
+.link:hover { color: var(--text); }
+.btn { border: 1px solid var(--card-stroke); background: var(--card); border-radius: 7px; padding: 4px 10px; font-size: 12px; }
+.btn.primary { background: var(--accent); color: #fff; border-color: transparent; }
+.seg { display: inline-flex; background: var(--track); border-radius: 8px; padding: 2px; gap: 2px; }
+.seg button { border: 0; background: transparent; padding: 3px 12px; border-radius: 6px; font-size: 12px; color: var(--text-2); }
+.seg button.on { background: var(--bg); color: var(--text); box-shadow: 0 1px 2px rgba(0,0,0,.15); }
+.bar { height: 8px; border-radius: 99px; background: var(--track); overflow: hidden; }
+.bar > i { display: block; height: 100%; border-radius: 99px; }
+.bar.thin { height: 5px; }
+
+/* heatmap */
+.heat { display: inline-grid; grid-auto-flow: column; }
+.heat .cell { border-radius: 22%; }
+.heat .cell:hover { outline: 1px solid var(--text-2); }
+.heat-wrap { position: relative; }
+.heat-months { display: grid; grid-auto-flow: column; color: var(--text-2); }
+.heat-months span { white-space: nowrap; overflow: visible; }
+.heat-legend { display: flex; align-items: center; gap: 4px; font-size: 11px; color: var(--text-3); }
+.heat-legend i { display: inline-block; border-radius: 2px; }

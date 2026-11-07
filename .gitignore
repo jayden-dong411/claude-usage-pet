@@ -2,3 +2,9 @@ build/
 dist/
 .DS_Store
 *.swp
+windows/node_modules/
+windows/.electron-dist/
+windows/assets/head/
+windows/assets/icon.png
+windows/assets/ATTRIBUTION.txt
+windows/build-res/

@@ -1,0 +1,72 @@
+{
+  "name": "claude-usage-pet",
+  "productName": "ClaudeUsagePet",
+  "version": "1.1.0",
+  "description": "Claude大小姐 · Claude 用量桌宠（Windows 版）",
+  "main": "main.js",
+  "author": "jayden-dong411",
+  "license": "MIT",
+  "private": true,
+  "scripts": {
+    "start": "electron .",
+    "snapshot": "electron . --snapshot ../build/win-snapshots --demo",
+    "dist:win": "electron-builder --win --x64"
+  },
+  "dependencies": {
+    "sql.js": "1.12.0"
+  },
+  "devDependencies": {
+    "electron": "33.4.11",
+    "electron-builder": "25.1.8"
+  },
+  "build": {
+    "appId": "io.github.jayden-dong411.claude-usage-pet",
+    "productName": "ClaudeUsagePet",
+    "copyright": "MIT (code) · character art CC BY-NC-SA 4.0",
+    "directories": {
+      "output": "../dist/windows",
+      "buildResources": "build-res"
+    },
+    "files": [
+      "main.js",
+      "preload.js",
+      "package.json",
+      "lib/**",
+      "renderer/**",
+      "assets/**",
+      "node_modules/sql.js/dist/sql-wasm.js",
+      "node_modules/sql.js/dist/sql-wasm.wasm",
+      "node_modules/sql.js/package.json"
+    ],
+    "asar": true,
+    "win": {
+      "executableName": "ClaudeUsagePet",
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        },
+        {
+          "target": "zip",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "icon": "build-res/icon.png",
+      "signAndEditExecutable": false
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "shortcutName": "Claude大小姐",
+      "uninstallDisplayName": "Claude大小姐 用量桌宠",
+      "artifactName": "ClaudeUsagePet-Setup-${version}-win-x64.${ext}",
+      "language": "2052"
+    },
+    "artifactName": "ClaudeUsagePet-${version}-win-${arch}-portable.${ext}"
+  }
+}

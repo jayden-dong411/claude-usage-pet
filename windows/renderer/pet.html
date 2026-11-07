@@ -1,0 +1,69 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'">
+<link rel="stylesheet" href="common.css">
+<style>
+  html, body { background: transparent; overflow: hidden; width: 220px; height: 300px; }
+  #stage { position: relative; width: 220px; height: 300px; }
+  #face { position: absolute; left: 40px; top: 44px; width: 140px; height: 140px; object-fit: contain; -webkit-user-drag: none; }
+  #stack { position: absolute; left: 0; right: 0; top: 180px; display: flex; flex-direction: column; align-items: center; gap: 4px; }
+  .chip { max-width: 212px; padding: 5px 9px; border-radius: 10px; background: var(--chip-bg); color: var(--chip-text);
+          border: 1px solid var(--chip-border); font-size: 11px; font-weight: 500; white-space: pre-line; line-height: 1.45; }
+  .chip.alert { border: 1.5px solid var(--chip-alert); }
+  #pill { padding: 3px 10px; border-radius: 99px; background: var(--pill-bg); color: var(--pill-text); border: 1px solid var(--pill-border);
+          font-size: 11px; font-weight: 600; font-variant-numeric: tabular-nums; white-space: pre; }
+  #bubble { position: absolute; left: 4px; right: 4px; top: 4px; display: flex; justify-content: center; pointer-events: none; }
+  #bubble span { max-width: 212px; padding: 6px 10px; border-radius: 12px; background: var(--chip-bg); color: var(--chip-text);
+                 border: 1.5px solid var(--pill-border); font-size: 12px; font-weight: 500; text-align: center; pointer-events: auto; }
+  .hide { display: none !important; }
+</style>
+</head>
+<body>
+<div id="stage">
+  <img id="face" class="hit" alt="">
+  <div id="stack">
+    <div id="task" class="chip hit hide"></div>
+    <div id="pill" class="hit"></div>
+  </div>
+  <div id="bubble" class="hide"><span class="hit"></span></div>
+</div>
+<script>
+  const $ = (id) => document.getElementById(id);
+  let face = '';
+  window.pet.onState((s) => {
+    if (s.face !== face) { face = s.face; $('face').src = `../assets/head/${face}.png`; }
+    $('pill').textContent = s.petPill;
+    const t = $('task');
+    t.classList.toggle('hide', !s.petTask);
+    t.classList.toggle('alert', !!s.alert);
+    if (s.petTask) t.textContent = s.petTask;
+    $('bubble').classList.toggle('hide', !s.bubble);
+    if (s.bubble) $('bubble').firstElementChild.textContent = s.bubble;
+  });
+
+  // Clicks pass through transparent areas; only the drawn parts take the mouse.
+  let over = false, down = null, moved = 0;
+  document.addEventListener('mousemove', (e) => {
+    const hit = !!e.target.closest?.('.hit');
+    if (hit !== over && !down) { over = hit; window.pet.mouse(hit); }
+    if (down) {
+      const dx = e.screenX - down.x, dy = e.screenY - down.y;
+      if (dx || dy) { moved += Math.abs(dx) + Math.abs(dy); down = { x: e.screenX, y: e.screenY }; if (moved > 3) window.pet.drag(dx, dy); }
+    }
+  });
+  document.addEventListener('mousedown', (e) => {
+    if (e.button !== 0 || !e.target.closest?.('.hit')) return;
+    down = { x: e.screenX, y: e.screenY }; moved = 0;
+  });
+  document.addEventListener('mouseup', (e) => {
+    if (e.button !== 0 || !down) return;
+    down = null;
+    if (moved > 3) window.pet.dragEnd(); else window.pet.click();
+  });
+  document.addEventListener('contextmenu', (e) => { if (e.target.closest?.('.hit')) { e.preventDefault(); window.pet.menu(); } });
+  document.addEventListener('mouseleave', () => { if (!down) { over = false; window.pet.mouse(false); } });
+</script>
+</body>
+</html>
