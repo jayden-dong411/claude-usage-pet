@@ -84,6 +84,23 @@
 
 大小、透明度、表情轮换间隔、是否偶尔说话、只在 Claude 前台时显示、Claude 全屏时隐藏、会话等你时提醒。
 
+### 可动小人模式（可选，仅 Mac 版）
+
+除了 80 个表情头像，大小姐还可以切换成**会动的全身小人**：待机、看书工作（有任务在跑）、等待（会话等你）、检查 / 受挫（额度紧张 / 告急）、跳跃（任务完成）、挥手（点她）、拖动时左右跑，空闲时目光跟着鼠标转（16 个方向）。
+
+切换方式：点开面板，名字下方的「😊 表情头像 | 🧍 可动小人」切换条；或者点面板里的头像、右键菜单「切换成可动小人」、设置里的「可动小人模式」。
+
+> 小人素材来自 [houn1u/claude-lady-pets-v2](https://github.com/houn1u/claude-lady-pets-v2)，该仓库**没有开放授权**，所以本项目和 Releases 安装包里都**不包含**这张图，也不会显示切换按钮。想在自己电脑上用的话：
+>
+> ```bash
+> mkdir -p Assets/claude-lady
+> curl -L -o Assets/claude-lady/spritesheet-extended.png \
+>   https://raw.githubusercontent.com/houn1u/claude-lady-pets-v2/main/assets/spritesheet-extended.png
+> ./build.sh        # 检测到素材就会打包进本机的 app，切换按钮随之出现
+> ```
+>
+> `Assets/claude-lady/` 已在 `.gitignore` 里；`package.sh` 生成分享安装包时会自动排除这张图（`EXCLUDE_LADY=1`）。
+
 ---
 
 ## 使用方法
@@ -95,6 +112,7 @@
 | **右键** | 菜单：用量统计、立即刷新、重新读取桌面版登录、登录 / 切换 claude.ai 账号、添加或移除另一个账号、设置、开机自动启动、回到右下角、素材署名、退出 |
 | 面板里**点会话** | 在 Claude 桌面版里打开那个会话；终端里的会话会打开它的项目文件夹 |
 | 面板里**点热力图**或「用量统计」 | 打开 Dashboard |
+| 面板里**点切换条或头像** | 在表情头像和可动小人之间切换（需要本机有小人素材） |
 
 **表情和情绪是怎么来的**
 
@@ -175,6 +193,7 @@ Sources/
   History.swift        用量历史和预测
   UsageIndex.swift     每日 token / 时长统计（增量索引）
   Expressions.swift    80 个表情的分组
+  LadySprite.swift     可动小人模式：图集切帧、动画播放、目光跟随鼠标
   PanelView.swift      点击后的面板
   Heatmap.swift        每日 Token 热力图、图表配色
   DashboardView.swift  用量统计窗口

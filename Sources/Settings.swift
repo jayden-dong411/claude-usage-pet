@@ -41,6 +41,7 @@ final class Settings: ObservableObject {
     @Published var hideInFullscreen: Bool { didSet { save("hideInFullscreen", hideInFullscreen) } }
     @Published var chatter: Bool { didSet { save("chatter", chatter) } }
     @Published var alertWaiting: Bool { didSet { save("alertWaiting", alertWaiting) } }
+    @Published var animatedMode: Bool { didSet { save("animatedMode", animatedMode) } }
 
     private init() {
         let d = UserDefaults.standard
@@ -53,6 +54,7 @@ final class Settings: ObservableObject {
         hideInFullscreen = flag("hideInFullscreen", false)
         chatter = flag("chatter", true)
         alertWaiting = flag("alertWaiting", true)
+        animatedMode = flag("animatedMode", false)
     }
 
     private func save(_ key: String, _ value: Any) {
@@ -90,6 +92,9 @@ struct SettingsView: View {
                         Text("约 \(Int(s.rotateSeconds)) 秒").monospacedDigit().frame(width: 64, alignment: .trailing)
                     }
                 }
+                Toggle("可动小人模式（全身动画，替代表情头像）", isOn: $s.animatedMode)
+                    .disabled(!LadySprite.available)
+                    .help(LadySprite.available ? "" : "这个版本没有打包可动小人素材")
                 Toggle("偶尔说句话", isOn: $s.chatter)
             }
             Section("什么时候出现") {

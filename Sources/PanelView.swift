@@ -137,6 +137,39 @@ struct TaskRow: View {
     }
 }
 
+/// Big two-option switch between the sticker heads and the animated figure.
+struct LookSwitch: View {
+    @ObservedObject var settings = Settings.shared
+
+    private func option(_ title: String, _ icon: String, _ on: Bool, animated: Bool) -> some View {
+        Button {
+            if settings.animatedMode != animated { settings.animatedMode = animated }
+        } label: {
+            HStack(spacing: 6) {
+                Image(systemName: icon).font(.system(size: 13, weight: .semibold))
+                Text(title).font(.callout.weight(.semibold))
+            }
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 7)
+            .foregroundStyle(on ? Color.white : Color.primary.opacity(0.75))
+            .background(RoundedRectangle(cornerRadius: 8).fill(on ? accent : Color.clear))
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+    }
+
+    var body: some View {
+        HStack(spacing: 4) {
+            option("表情头像", "face.smiling", !settings.animatedMode, animated: false)
+            option("可动小人", "figure.wave", settings.animatedMode, animated: true)
+        }
+        .padding(3)
+        .background(RoundedRectangle(cornerRadius: 10).fill(Color.secondary.opacity(0.12)))
+        .animation(.easeOut(duration: 0.15), value: settings.animatedMode)
+        .help("一键切换大小姐的形象")
+    }
+}
+
 struct PanelView: View {
     @ObservedObject var model: AppModel
     @ObservedObject var dashboard: DashboardModel
@@ -158,6 +191,7 @@ struct PanelView: View {
             heatmapSection
             Divider()
             header
+            if LadySprite.available { LookSwitch() }
             usageSection
             if model.hasSecondary { secondarySection }
             Divider()
@@ -191,9 +225,12 @@ struct PanelView: View {
 
     private var header: some View {
         HStack(spacing: 10) {
-            Image(nsImage: Faces.image(model.face) ?? NSImage())
+            Image(nsImage: model.frame ?? Faces.image(model.face) ?? NSImage())
                 .resizable().interpolation(.high).aspectRatio(contentMode: .fit)
                 .frame(width: 46, height: 46)
+                .contentShape(Rectangle())
+                .onTapGesture { if LadySprite.available { Settings.shared.animatedMode.toggle() } }
+                .help(LadySprite.available ? "点头像切换形象" : "")
             VStack(alignment: .leading, spacing: 2) {
                 HStack(spacing: 6) {
                     Text("Claude大小姐").font(.headline)

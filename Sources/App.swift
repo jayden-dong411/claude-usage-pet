@@ -21,11 +21,13 @@ let claudeBundleID = "com.anthropic.claudefordesktop"
 final class PetView: NSView {
     var onClick: (() -> Void)?
     var onDragStart: (() -> Void)?
+    var onDragMove: ((CGFloat) -> Void)?
     var onDragEnd: (() -> Void)?
     var menuProvider: (() -> NSMenu)?
 
     private var startMouse = NSPoint.zero
     private var startOrigin = NSPoint.zero
+    private var lastX: CGFloat = 0
     private var dragging = false
 
     override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
@@ -33,6 +35,7 @@ final class PetView: NSView {
 
     override func mouseDown(with event: NSEvent) {
         startMouse = NSEvent.mouseLocation
+        lastX = startMouse.x
         startOrigin = window?.frame.origin ?? .zero
         dragging = false
     }
@@ -41,7 +44,11 @@ final class PetView: NSView {
         let p = NSEvent.mouseLocation
         let dx = p.x - startMouse.x, dy = p.y - startMouse.y
         if !dragging && hypot(dx, dy) > 3 { dragging = true; onDragStart?() }
-        if dragging { window?.setFrameOrigin(NSPoint(x: startOrigin.x + dx, y: startOrigin.y + dy)) }
+        if dragging {
+            window?.setFrameOrigin(NSPoint(x: startOrigin.x + dx, y: startOrigin.y + dy))
+            onDragMove?(p.x - lastX)
+            lastX = p.x
+        }
     }
 
     override func mouseUp(with event: NSEvent) {
@@ -134,14 +141,24 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, NSW
     private var faceTimer: Timer?
     private var lastNudge = Date.distantPast
 
-    // Layout in base units (scaled by Settings.scale), top-down: bubble, head, tasks, usage pill.
-    private let baseSize = NSSize(width: 220, height: 300)
-    private let imgSize: CGFloat = 140
-    private let imgY: CGFloat = 116
-    private var belowHead: CGFloat { imgY + 4 }
+    // Animated-figure mode (Settings.animatedMode, needs the local sprite sheet).
+    private var animator: SpriteAnimator?
+    private var lookTimer: Timer?
+    private var lastMouse = NSPoint.zero
+    private var mouseMovedAt = Date.distantPast
+    private var forceAnimated = false          // `--snapshot … --animated` (test only, not saved)
+    private var animated: Bool { (settings.animatedMode || forceAnimated) && LadySprite.available }
+
+    // Layout in base units (scaled by Settings.scale), top-down: bubble, head/figure, tasks, usage pill.
+    private var baseSize: NSSize { animated ? NSSize(width: 220, height: 320) : NSSize(width: 220, height: 300) }
+    private var imgRect: NSRect {
+        animated ? NSRect(x: 35, y: 122, width: 150, height: 162) : NSRect(x: 40, y: 116, width: 140, height: 140)
+    }
+    private var belowHead: CGFloat { imgRect.minY + (animated ? 6 : 4) }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         snapshotMode = CommandLine.arguments.contains("--snapshot")
+        forceAnimated = snapshotMode && CommandLine.arguments.contains("--animated")
         buildPanel()
         model.onChange = { [weak self] in self?.refreshPet() }
         model.onTaskFinished = { [weak self] s in self?.react(.taskDone, say: "「\(s.name)」完成了哦～") }
@@ -321,10 +338,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, NSW
             self.togglePopover()
         }
         petView.onDragStart = { [weak self] in self?.popover?.performClose(nil) }
-        petView.onDragEnd = { [weak self] in self?.saveOrigin() }
+        petView.onDragMove = { [weak self] dx in self?.animator?.drag(dx) }
+        petView.onDragEnd = { [weak self] in
+            self?.saveOrigin()
+            self?.animator?.endDrag()
+        }
         petView.menuProvider = { [weak self] in self?.buildMenu() ?? NSMenu() }
 
-        imageView = NSImageView(frame: NSRect(x: (baseSize.width - imgSize) / 2, y: imgY, width: imgSize, height: imgSize))
+        imageView = NSImageView(frame: imgRect)
         imageView.imageScaling = .scaleProportionallyUpOrDown
         petView.addSubview(imageView)
 
@@ -353,6 +374,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, NSW
 
     /// Size, opacity; keeps the top edge of the pet where it is.
     private func applySettings() {
+        applyMode()
         let s = CGFloat(settings.scale)
         let size = NSSize(width: round(baseSize.width * s), height: round(baseSize.height * s))
         var f = panel.frame
@@ -366,6 +388,52 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, NSW
         petView.bounds = NSRect(origin: .zero, size: baseSize)
         panel.alphaValue = CGFloat(settings.opacity)
         updateVisibility()
+    }
+
+    /// Starts or stops the animated figure to match Settings.animatedMode.
+    private func applyMode() {
+        imageView.frame = imgRect
+        if animated && animator == nil {
+            let a = SpriteAnimator(imageView: imageView) { [weak self] img in self?.model.frame = img }
+            animator = a
+            moodKey = ""
+            a.start()
+            tickFace()
+            lookTimer = Timer.scheduledTimer(withTimeInterval: 0.12, repeats: true) { [weak self] _ in
+                Task { @MainActor in self?.lookAtMouse() }
+            }
+        } else if !animated && animator != nil {
+            animator?.stop()
+            animator = nil
+            lookTimer?.invalidate()
+            lookTimer = nil
+            model.frame = nil
+            moodKey = ""
+            face = nil
+            tickFace()
+        }
+        refreshPet()
+    }
+
+    /// While idle, the figure turns toward a mouse moving nearby (16 directions).
+    private func lookAtMouse() {
+        guard let animator, panel.isVisible else { return }
+        let m = NSEvent.mouseLocation
+        if m != lastMouse { lastMouse = m; mouseMovedAt = Date() }
+        let f = panel.frame, s = CGFloat(settings.scale)
+        let c = NSPoint(x: f.minX + imgRect.midX * s, y: f.minY + imgRect.midY * s)
+        let dx = m.x - c.x, dy = m.y - c.y, dist = hypot(dx, dy)
+        if Date().timeIntervalSince(mouseMovedAt) < 2.5 && dist > 60 * s && dist < 700 {
+            animator.look(atan2(dx, dy) * 180 / .pi)       // 0° = up, clockwise
+        } else {
+            animator.look(nil)
+        }
+    }
+
+    @objc private func menuToggleAnimated() {
+        guard LadySprite.available else { return }
+        settings.animatedMode.toggle()
+        react(.greet, seconds: 3, say: settings.animatedMode ? "换成可动小人啦～" : "换回表情头像啦～")
     }
 
     // MARK: Only over Claude
@@ -481,7 +549,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, NSW
 
     private func setFace(_ name: String) {
         face = name
-        imageView.image = Faces.image(name)
+        if animator == nil { imageView.image = Faces.image(name) }
         model.face = name
     }
 
@@ -498,6 +566,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, NSW
         let moods = baseMoods()
         let key = moods.map(\.rawValue).joined(separator: ",")
         let moodChanged = key != moodKey
+        if let animator {
+            // One animation at a time: waiting > working > usage mood.
+            let main: Mood = moods.contains(.needsYou) ? .needsYou : moods.contains(.working) ? .working : moods[0]
+            animator.setBase(main.ladyAnim)
+            model.face = face ?? "hi"
+            moodKey = key
+            if now >= nextRotate {
+                let base = settings.rotateSeconds
+                nextRotate = now.addingTimeInterval(.random(in: base * 1.4...base * 2.6))
+                if settings.chatter, !moodChanged, bubble.isHidden, let line = moods.randomElement()?.lines.randomElement() {
+                    say(line, seconds: 4)
+                }
+            }
+            return
+        }
         guard moodChanged || now >= nextRotate || face == nil else { return }
         moodKey = key
         setFace(Faces.pick(from: moods, avoiding: face))
@@ -511,7 +594,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, NSW
 
     /// Shows a face from `mood` for a few seconds, then goes back to rotating.
     private func react(_ mood: Mood, seconds: Double = 5, say text: String? = nil) {
-        setFace(Faces.pick(from: [mood], avoiding: face))
+        if let animator {
+            animator.react(mood.ladyAnim, loops: max(1, Int((seconds / 1.2).rounded())))
+        } else {
+            setFace(Faces.pick(from: [mood], avoiding: face))
+        }
         reactionUntil = Date().addingTimeInterval(seconds)
         nextRotate = reactionUntil
         if let text { say(text) }
@@ -524,7 +611,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, NSW
     }
 
     private func say(_ text: String, seconds: Double = 5) {
-        bubble.set(text, centerX: baseSize.width / 2, y: imgY + imgSize - 18, maxWidth: baseSize.width - 8, radius: 12)
+        bubble.set(text, centerX: baseSize.width / 2, y: imgRect.maxY - (animated ? 6 : 18), maxWidth: baseSize.width - 8, radius: 12)
         bubble.isHidden = false
         bubbleHide?.cancel()
         let w = DispatchWorkItem { [weak self] in self?.bubble.isHidden = true }
@@ -677,6 +764,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, NSW
     private func buildMenu() -> NSMenu {
         let m = NSMenu()
         func item(_ title: String, _ sel: Selector) { m.addItem(withTitle: title, action: sel, keyEquivalent: "").target = self }
+        if LadySprite.available {
+            item(settings.animatedMode ? "切换成表情头像" : "切换成可动小人", #selector(menuToggleAnimated))
+            m.addItem(.separator())
+        }
         item("查看用量和任务", #selector(menuShow))
         item("用量统计…", #selector(menuDashboard))
         item("立即刷新", #selector(menuRefresh))
@@ -728,6 +819,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, NSW
         let a = NSAlert()
         a.messageText = "素材署名"
         a.informativeText = Doro.attribution + "\n\n形象图片是该仓库 head/ 目录的全部 80 张，缩小了尺寸并去掉了白色外框，按 CC BY-NC-SA 4.0 非商业使用。"
+            + (LadySprite.available ? "\n\n可动小人：github.com/houn1u/claude-lady-pets-v2（Claude 大小姐 Pets v2 动态图集）。该仓库没有开放授权，只在本机使用，不随安装包分发。" : "")
         a.addButton(withTitle: "好")
         a.addButton(withTitle: "打开素材仓库")
         NSApp.activate(ignoringOtherApps: true)

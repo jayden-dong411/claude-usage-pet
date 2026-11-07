@@ -39,6 +39,14 @@ swiftc -O Tools/strip_outline.swift -o "$TMP/strip_outline" 2>/dev/null
 "$TMP/strip_outline" "$ART/head" "$RES/head"      # remove the white sticker outline
 cp "$ART/ATTRIBUTION.txt" "$RES/ATTRIBUTION.txt"
 
+# Animated-figure sprite sheet (github.com/houn1u/claude-lady-pets-v2). It has no open license, so it
+# lives only in the git-ignored Assets/claude-lady and is left out when EXCLUDE_LADY=1 (package.sh).
+LADY="$ROOT/Assets/claude-lady/spritesheet-extended.png"
+if [[ -f "$LADY" && "${EXCLUDE_LADY:-0}" != "1" ]]; then
+  cp "$LADY" "$RES/lady-spritesheet.png"
+  echo "  已包含可动小人素材（仅本机）"
+fi
+
 echo "• 生成图标…"
 ICONSET="$TMP/AppIcon.iconset"
 mkdir -p "$ICONSET"

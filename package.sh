@@ -2,7 +2,7 @@
 # Builds the app and makes dist/Claude大小姐.zip (app + install guide) to send to a friend.
 set -euo pipefail
 cd "$(dirname "$0")"
-./build.sh
+EXCLUDE_LADY=1 ./build.sh          # the animated-figure art may not be redistributed
 STAGE="build/package"
 rm -rf "$STAGE" && mkdir -p "$STAGE/Claude大小姐" dist
 cp -R "build/Claude大小姐.app" "$STAGE/Claude大小姐/"

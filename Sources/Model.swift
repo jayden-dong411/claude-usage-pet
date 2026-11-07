@@ -37,6 +37,8 @@ final class AppModel: ObservableObject {
     @Published var sessions: [SessionInfo] = []
     @Published var now = Date()
     @Published var face = "hi"
+    /// Current frame of the animated figure (nil in sticker mode).
+    @Published var frame: NSImage?
 
     var onChange: (() -> Void)?
     var onTaskFinished: ((SessionInfo) -> Void)?
