@@ -1,0 +1,3 @@
+素材：Claude大小姐的日记本（github.com/opsCar/claude-daxiaojie-assets）· 角色设定：ZipZipPipe（胖次狐）· 设定图：lmy414/ai-chan-sheets · CC BY-NC-SA 4.0
+head/ 目录中的 80 张图片来自上述仓库的 head/ 目录（去掉了文件名前缀 head_），仅缩小了尺寸；构建时会去掉白色贴纸外框，按 CC BY-NC-SA 4.0 使用，非商业用途。
+协议全文：https://creativecommons.org/licenses/by-nc-sa/4.0/deed.zh-hans
