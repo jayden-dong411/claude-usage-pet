@@ -194,6 +194,7 @@ struct PanelView: View {
             if LadySprite.available { LookSwitch() }
             usageSection
             if model.hasSecondary { secondarySection }
+            if let c = model.codex { codexSection(c) }
             Divider()
             tasksSection
             Divider()
@@ -285,6 +286,40 @@ struct PanelView: View {
                     .buttonStyle(.borderless).font(.caption)
             }
         }
+    }
+
+    /// Codex (ChatGPT) limits read from ~/.codex logs; click to open ChatGPT.
+    private func codexSection(_ c: CodexLimits) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 6) {
+                Image(systemName: "sparkles").foregroundStyle(Color(red: 0.43, green: 0.36, blue: 0.86))
+                Text("ChatGPT · Codex 额度").font(.subheadline.weight(.semibold))
+                if let plan = c.plan { Text(plan).font(.caption).foregroundStyle(.secondary) }
+                Spacer()
+                Text("\(Fmt.when(c.observedAt)) 的数据").font(.caption2).foregroundStyle(.tertiary)
+            }
+            HStack(spacing: 14) {
+                VStack(alignment: .leading, spacing: 2) {
+                    UsageBar(title: "5 小时", window: c.fiveHour, now: model.now, compact: true)
+                    Text(c.fiveHour?.resetsAt.map { "\(Fmt.when($0)) 重置" } ?? "已重置").font(.caption2).foregroundStyle(.secondary)
+                }
+                VStack(alignment: .leading, spacing: 2) {
+                    UsageBar(title: "每周", window: c.weekly, now: model.now, compact: true)
+                    Text(c.weekly?.resetsAt.map { "\(Fmt.when($0)) 重置" } ?? "已重置").font(.caption2).foregroundStyle(.secondary)
+                }
+            }
+        }
+        .padding(10)
+        .background(RoundedRectangle(cornerRadius: 8).fill(Color(red: 0.43, green: 0.36, blue: 0.86).opacity(0.08)))
+        .contentShape(Rectangle())
+        .onTapGesture {
+            for id in ["com.openai.codex", "com.openai.chat"] {
+                if let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: id) {
+                    NSWorkspace.shared.openApplication(at: url, configuration: .init()); break
+                }
+            }
+        }
+        .help("点击打开 ChatGPT")
     }
 
     private var secondarySection: some View {

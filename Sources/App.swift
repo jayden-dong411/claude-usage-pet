@@ -20,6 +20,10 @@ let claudeBundleID = "com.anthropic.claudefordesktop"
 
 final class PetView: NSView {
     var onClick: (() -> Void)?
+    var onDoubleClick: (() -> Void)?
+    /// Mouse rubbed back and forth over `petRect` (the head / figure).
+    var onPet: (() -> Void)?
+    var petRect: () -> NSRect = { .zero }
     var onDragStart: (() -> Void)?
     var onDragMove: ((CGFloat) -> Void)?
     var onDragEnd: (() -> Void)?
@@ -29,6 +33,41 @@ final class PetView: NSView {
     private var startOrigin = NSPoint.zero
     private var lastX: CGFloat = 0
     private var dragging = false
+    private var pendingClick: DispatchWorkItem?
+    private var rubDir: CGFloat = 0
+    private var rubTurns: [Date] = []
+    private var rubLastX: CGFloat?
+    private var lastPet = Date.distantPast
+
+    override func updateTrackingAreas() {
+        super.updateTrackingAreas()
+        trackingAreas.forEach(removeTrackingArea)
+        addTrackingArea(NSTrackingArea(rect: bounds, options: [.mouseMoved, .mouseEnteredAndExited, .activeAlways, .inVisibleRect],
+                                       owner: self))
+    }
+
+    override func mouseExited(with event: NSEvent) { rubLastX = nil; rubTurns.removeAll() }
+
+    /// Counts left/right turns of the pointer over the figure; 4 turns within 1.6 s = petting.
+    override func mouseMoved(with event: NSEvent) {
+        let p = convert(event.locationInWindow, from: nil)
+        guard petRect().contains(p) else { rubLastX = nil; return }
+        defer { rubLastX = p.x }
+        guard let last = rubLastX else { return }
+        let dx = p.x - last
+        guard abs(dx) > 1.5 else { return }
+        let dir: CGFloat = dx > 0 ? 1 : -1
+        if rubDir != 0 && dir != rubDir {
+            let now = Date()
+            rubTurns = rubTurns.filter { now.timeIntervalSince($0) < 1.6 } + [now]
+            if rubTurns.count >= 4 && now.timeIntervalSince(lastPet) > 6 {
+                lastPet = now
+                rubTurns.removeAll()
+                onPet?()
+            }
+        }
+        rubDir = dir
+    }
 
     override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
     override func hitTest(_ point: NSPoint) -> NSView? { super.hitTest(point) == nil ? nil : self }
@@ -51,9 +90,22 @@ final class PetView: NSView {
         }
     }
 
+    /// A second click within 0.3 s is a double-click (jump); otherwise the click fires after that wait.
     override func mouseUp(with event: NSEvent) {
-        if dragging { onDragEnd?() } else { onClick?() }
-        dragging = false
+        defer { dragging = false }
+        if dragging { onDragEnd?(); return }
+        if let p = pendingClick {
+            p.cancel()
+            pendingClick = nil
+            onDoubleClick?()
+            return
+        }
+        let w = DispatchWorkItem { [weak self] in
+            self?.pendingClick = nil
+            self?.onClick?()
+        }
+        pendingClick = w
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3, execute: w)
     }
 
     override func rightMouseDown(with event: NSEvent) {
@@ -147,6 +199,24 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, NSW
     private var lastMouse = NSPoint.zero
     private var mouseMovedAt = Date.distantPast
     private var forceAnimated = false          // `--snapshot … --animated` (test only, not saved)
+
+    // Menu bar item
+    private var statusItem: NSStatusItem?
+    private var statusIcons: [String: NSImage] = [:]
+    private var statusNote: (text: String, until: Date)?
+
+    // Focus timer (pomodoro): work, then a short rest
+    private var focusEnd: Date?
+    private var restEnd: Date?
+    private var focusTimer: Timer?
+    private var focusing: Bool { focusEnd != nil }
+
+    // Wellness reminders
+    private var forceShowUntil = Date.distantPast
+    private var streakStart: Date?
+    private var nextSitRemind = Date.distantFuture
+    private var lastClaudeActive = Date.distantPast
+    private var lastNightRemind = Date.distantPast
     private var animated: Bool { (settings.animatedMode || forceAnimated) && LadySprite.available }
 
     // Layout in base units (scaled by Settings.scale), top-down: bubble, head/figure, tasks, usage pill.
@@ -185,6 +255,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, NSW
         faceTimer = Timer.scheduledTimer(withTimeInterval: 2, repeats: true) { [weak self] _ in
             Task { @MainActor in
                 self?.tickFace()
+                self?.tickWellness()
                 self?.updateVisibility()
             }
         }
@@ -218,6 +289,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, NSW
                     self.model.sessions = Self.demoSessions()
                     self.dashboard.days = Self.demoDays()
                     self.dashboard.lastIndexed = Date()
+                    self.dashboard.codexDays = Self.demoDays().mapValues { d in
+                        var x = d; x.tokens.input /= 3; x.tokens.output /= 3; x.tokens.cacheRead /= 4; x.tokens.cacheWrite /= 4
+                        x.activeSeconds /= 2; return x
+                    }
+                    self.model.codex = CodexLimits(
+                        fiveHour: LimitWindow(utilization: 22, resetsAt: Date().addingTimeInterval(9000)),
+                        weekly: LimitWindow(utilization: 47, resetsAt: Date().addingTimeInterval(300000)),
+                        plan: "plus", observedAt: Date().addingTimeInterval(-600))
+                    if args.contains("--focus") { self.focusEnd = Date().addingTimeInterval(23 * 60 + 12) }
                     self.refreshPet()
                     self.setFace("ojou_laugh")
                     self.say("本小姐驾到～ 点我看用量")
@@ -308,6 +388,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, NSW
         dash.frame = NSRect(x: 0, y: 0, width: 800, height: 1100)
         dash.layoutSubtreeIfNeeded()
         png(dash, "dashboard.png")
+        let dashAll = NSHostingView(rootView: DashboardView(dm: dashboard, source: .all).background(Color(nsColor: .windowBackgroundColor)))
+        dashAll.frame = NSRect(x: 0, y: 0, width: 800, height: 1100)
+        dashAll.layoutSubtreeIfNeeded()
+        png(dashAll, "dashboard-all.png")
         let set = NSHostingView(rootView: SettingsView().background(Color(nsColor: .windowBackgroundColor)))
         set.frame = NSRect(origin: .zero, size: set.fittingSize)
         set.layoutSubtreeIfNeeded()
@@ -337,6 +421,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, NSW
             if self.popover?.isShown != true { self.react(.clicked, seconds: 4) }
             self.togglePopover()
         }
+        petView.onDoubleClick = { [weak self] in self?.hop() }
+        petView.onPet = { [weak self] in
+            guard let self else { return }
+            self.react(.petted, seconds: 4, say: Mood.petted.lines.randomElement())
+        }
+        petView.petRect = { [weak self] in self?.imgRect ?? .zero }
         petView.onDragStart = { [weak self] in self?.popover?.performClose(nil) }
         petView.onDragMove = { [weak self] dx in self?.animator?.drag(dx) }
         petView.onDragEnd = { [weak self] in
@@ -387,6 +477,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, NSW
         petView.frame = NSRect(origin: .zero, size: size)
         petView.bounds = NSRect(origin: .zero, size: baseSize)
         panel.alphaValue = CGFloat(settings.opacity)
+        updateStatusItem()
         updateVisibility()
     }
 
@@ -464,6 +555,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, NSW
                 show = front == claudeBundleID || front == Bundle.main.bundleIdentifier
             }
             if show && settings.hideInFullscreen && front == claudeBundleID && claudeIsFullscreen() { show = false }
+            if Date() < forceShowUntil { show = true }   // reminders pop up over any app for a moment
         }
         if show && !panel.isVisible {
             panel.orderFrontRegardless()
@@ -485,6 +577,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, NSW
         } else if model.needsLogin {
             text = "点我登录看用量"
         }
+        if let f = focusEnd {
+            text = "🍅 专注 \(Self.mmss(f.timeIntervalSinceNow))"
+        } else if let r = restEnd {
+            text = "☕ 休息 \(Self.mmss(r.timeIntervalSinceNow))"
+        }
         // Task progress sits right under the head, the usage pill under that.
         var top = belowHead
         if let t = taskText() {
@@ -499,6 +596,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, NSW
         }
         pill.set(text, centerX: baseSize.width / 2, y: 0, maxWidth: baseSize.width)
         pill.setFrameOrigin(NSPoint(x: pill.frame.minX, y: top - pill.frame.height))
+        updateStatusItem()
+    }
+
+    static func mmss(_ secs: TimeInterval) -> String {
+        let s = max(0, Int(secs.rounded(.up)))
+        return String(format: "%d:%02d", s / 60, s % 60)
     }
 
     private func clip(_ s: String, _ n: Int) -> String {
@@ -540,7 +643,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, NSW
             default: moods = [.crushed]
             }
         }
-        if model.busyCount > 0 { moods.append(.working) }
+        if model.busyCount > 0 || focusing { moods.append(.working) }
         if settings.alertWaiting && !model.waitingSessions.isEmpty { moods.append(.needsYou) }
         let hour = Calendar.current.component(.hour, from: Date())
         if (1..<6).contains(hour) { moods.append(.night) }
@@ -551,6 +654,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, NSW
         face = name
         if animator == nil { imageView.image = Faces.image(name) }
         model.face = name
+        updateStatusItem()
     }
 
     /// Picks a new base face when the mood changes or the rotation is due.
@@ -575,7 +679,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, NSW
             if now >= nextRotate {
                 let base = settings.rotateSeconds
                 nextRotate = now.addingTimeInterval(.random(in: base * 1.4...base * 2.6))
-                if settings.chatter, !moodChanged, bubble.isHidden, let line = moods.randomElement()?.lines.randomElement() {
+                if settings.chatter, !focusing, !moodChanged, bubble.isHidden, let line = moods.randomElement()?.lines.randomElement() {
                     say(line, seconds: 4)
                 }
             }
@@ -586,7 +690,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, NSW
         setFace(Faces.pick(from: moods, avoiding: face))
         let base = settings.rotateSeconds
         nextRotate = now.addingTimeInterval(.random(in: base * 0.7...base * 1.3))
-        if settings.chatter, !moodChanged, bubble.isHidden, Int.random(in: 0..<4) == 0,
+        if settings.chatter, !focusing, !moodChanged, bubble.isHidden, Int.random(in: 0..<4) == 0,
            let line = moods.randomElement()?.lines.randomElement() {
             say(line, seconds: 4)
         }
@@ -634,7 +738,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, NSW
 
     // MARK: Popover
 
-    private func togglePopover() {
+    private func togglePopover(from anchor: NSView? = nil) {
         if let p = popover, p.isShown { p.performClose(nil); return }
         model.refreshSessions(notify: false)
         if let last = model.lastUsageUpdate, Date().timeIntervalSince(last) < 30 {} else {
@@ -657,7 +761,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, NSW
         p.delegate = self
         popover = p
         NSApp.activate(ignoringOtherApps: true)
-        p.show(relativeTo: imageView.bounds, of: imageView, preferredEdge: .minX)
+        if let anchor {
+            p.show(relativeTo: anchor.bounds, of: anchor, preferredEdge: .minY)
+        } else {
+            p.show(relativeTo: imageView.bounds, of: imageView, preferredEdge: .minX)
+        }
     }
 
     nonisolated func popoverDidClose(_ notification: Notification) {
@@ -759,6 +867,190 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, NSW
         wc?.close()
     }
 
+    // MARK: Interactions
+
+    /// Double-click: a little jump (whole-body jump animation, or a hop of the head sticker).
+    private func hop() {
+        popover?.performClose(nil)
+        if animator != nil {
+            react(.hop, seconds: 2.4)
+            return
+        }
+        react(.hop, seconds: 2.5)
+        let home = imgRect
+        NSAnimationContext.runAnimationGroup({ ctx in
+            ctx.duration = 0.16
+            ctx.timingFunction = CAMediaTimingFunction(name: .easeOut)
+            imageView.animator().setFrameOrigin(NSPoint(x: home.minX, y: home.minY + 26))
+        }, completionHandler: { [weak self] in
+            NSAnimationContext.runAnimationGroup({ ctx in
+                ctx.duration = 0.22
+                ctx.timingFunction = CAMediaTimingFunction(name: .easeIn)
+                self?.imageView.animator().setFrameOrigin(home.origin)
+            })
+        })
+        if Int.random(in: 0..<3) == 0, let line = Mood.hop.lines.randomElement() { say(line, seconds: 2.5) }
+    }
+
+    // MARK: Focus timer
+
+    private func startFocus() {
+        let mins = settings.focusMinutes
+        restEnd = nil
+        focusEnd = Date().addingTimeInterval(mins * 60)
+        streakStart = nil                       // breaks are built into focus mode
+        react(.taskStarted, seconds: 4, say: "专注 \(Int(mins)) 分钟，开始！本小姐帮你看着时间～")
+        runFocusTimer()
+        refreshPet()
+    }
+
+    private func stopFocus() {
+        let wasFocusing = focusing
+        focusEnd = nil
+        restEnd = nil
+        focusTimer?.invalidate()
+        focusTimer = nil
+        say(wasFocusing ? "好吧，这次就先到这里～" : "那就继续加油吧！")
+        refreshPet()
+    }
+
+    private func runFocusTimer() {
+        focusTimer?.invalidate()
+        focusTimer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in
+            Task { @MainActor in self?.tickFocus() }
+        }
+    }
+
+    private func tickFocus() {
+        let now = Date()
+        if let f = focusEnd, now >= f {
+            focusEnd = nil
+            restEnd = now.addingTimeInterval(5 * 60)
+            NSSound(named: "Glass")?.play()
+            remind(.taskDone, "专注 \(Int(settings.focusMinutes)) 分钟完成！起来活动 5 分钟、喝口水吧～", note: "🍅 完成！")
+        } else if let r = restEnd, now >= r {
+            restEnd = nil
+            focusTimer?.invalidate()
+            focusTimer = nil
+            streakStart = nil
+            NSSound(named: "Tink")?.play()
+            remind(.greet, "休息结束～ 要再来一轮专注的话右键我哦", note: "☕ 休息结束")
+        }
+        refreshPet()
+    }
+
+    // MARK: Wellness reminders
+
+    /// Shows a reminder even when Claude isn't in front: the pet pops up for a while and the
+    /// menu bar item shows `note`.
+    private func remind(_ mood: Mood, _ text: String, note: String, seconds: Double = 12) {
+        forceShowUntil = Date().addingTimeInterval(seconds)
+        statusNote = (note, forceShowUntil)
+        updateVisibility()
+        react(mood, seconds: seconds, say: nil)
+        say(text, seconds: seconds)
+        updateStatusItem()
+    }
+
+    /// Seconds since the last keyboard / mouse input anywhere.
+    private func inputIdleSeconds() -> TimeInterval {
+        CGEventSource.secondsSinceLastEventType(.combinedSessionState, eventType: CGEventType(rawValue: ~0)!)
+    }
+
+    /// Continuous-use streak (reset by 5 min away from the keyboard or 10 min without Claude)
+    /// and late-night use.
+    private func tickWellness() {
+        guard !snapshotMode else { return }
+        let now = Date()
+        if let note = statusNote, now >= note.until { statusNote = nil; updateStatusItem() }
+        let idle = inputIdleSeconds()
+        let front = NSWorkspace.shared.frontmostApplication?.bundleIdentifier
+        if idle < 120 && (front == claudeBundleID || model.busyCount > 0 || !model.waitingSessions.isEmpty) {
+            lastClaudeActive = now
+        }
+        if idle >= 300 || now.timeIntervalSince(lastClaudeActive) > 600 || focusing || restEnd != nil {
+            streakStart = nil
+        } else if streakStart == nil {
+            streakStart = now
+            nextSitRemind = now.addingTimeInterval(2 * 3600)
+        }
+        if settings.sitReminder, let start = streakStart, now >= nextSitRemind {
+            nextSitRemind = now.addingTimeInterval(30 * 60)
+            let mins = Int(now.timeIntervalSince(start) / 60)
+            let span = mins >= 60 ? "\(mins / 60) 小时\(mins % 60 > 0 ? " \(mins % 60) 分" : "")" : "\(mins) 分钟"
+            remind(.care, "已经连续用了 \(span)啦，站起来走走、喝口水吧～", note: "🧋 该活动啦")
+        }
+        let hour = Calendar.current.component(.hour, from: now)
+        if settings.nightReminder, (0..<5).contains(hour), now.timeIntervalSince(lastClaudeActive) < 120,
+           now.timeIntervalSince(lastNightRemind) > 3600 {
+            lastNightRemind = now
+            let line = ["已经 \(hour == 0 ? "12" : "\(hour)") 点多了，早点休息吧～", "熬夜伤皮肤，本小姐要去睡美容觉了…你也是！",
+                        "这么晚还在忙？存个档明天再继续吧"].randomElement()!
+            remind(.night, line, note: "🌙 该睡啦")
+        }
+    }
+
+    // MARK: Menu bar item
+
+    private func statusIcon(_ name: String) -> NSImage? {
+        if let i = statusIcons[name] { return i }
+        guard let src = Faces.image(name) else { return nil }
+        let img = NSImage(size: NSSize(width: 18, height: 18), flipped: false) { r in
+            src.draw(in: r, from: .zero, operation: .sourceOver, fraction: 1)
+            return true
+        }
+        statusIcons[name] = img
+        return img
+    }
+
+    private func updateStatusItem() {
+        guard !snapshotMode, settings.menuBarIcon else {
+            if let s = statusItem { NSStatusBar.system.removeStatusItem(s); statusItem = nil }
+            return
+        }
+        if statusItem == nil {
+            let s = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
+            s.button?.target = self
+            s.button?.action = #selector(statusClicked(_:))
+            s.button?.sendAction(on: [.leftMouseUp, .rightMouseUp])
+            s.button?.imagePosition = .imageLeft
+            s.button?.font = .monospacedDigitSystemFont(ofSize: 12, weight: .medium)
+            statusItem = s
+        }
+        guard let button = statusItem?.button else { return }
+        button.image = statusIcon(animator == nil ? (face ?? "hi") : "hi")
+        var title: String
+        if let note = statusNote, Date() < note.until {
+            title = note.text
+        } else if let f = focusEnd {
+            title = "🍅 \(Self.mmss(f.timeIntervalSinceNow))"
+        } else if let r = restEnd {
+            title = "☕ \(Self.mmss(r.timeIntervalSinceNow))"
+        } else if let w = model.usage?.fiveHour {
+            title = "5h \(Int(w.utilization.rounded()))%"
+        } else {
+            title = model.needsLogin ? "未登录" : "5h —"
+        }
+        if !model.waitingSessions.isEmpty && focusEnd == nil { title = "⏳ " + title }
+        if button.title != " " + title { button.title = " " + title }
+        var tip = "Claude大小姐"
+        if let u = model.usage {
+            tip += "\n5 小时 \(u.fiveHour.map { Fmt.pct($0.utilization) } ?? "—") · 每周 \(u.sevenDay.map { Fmt.pct($0.utilization) } ?? "—")"
+        }
+        if model.busyCount > 0 { tip += "\n\(model.busyCount) 个任务进行中" }
+        if !model.waitingSessions.isEmpty { tip += "\n\(model.waitingSessions.count) 个会话在等你" }
+        button.toolTip = tip + "\n左键看详情 · 右键菜单"
+    }
+
+    @objc private func statusClicked(_ sender: NSStatusBarButton) {
+        if NSApp.currentEvent?.type == .rightMouseUp {
+            popover?.performClose(nil)
+            buildMenu().popUp(positioning: nil, at: NSPoint(x: 0, y: sender.bounds.height + 4), in: sender)
+        } else {
+            togglePopover(from: sender)
+        }
+    }
+
     // MARK: Right-click menu
 
     private func buildMenu() -> NSMenu {
@@ -771,6 +1063,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, NSW
         item("查看用量和任务", #selector(menuShow))
         item("用量统计…", #selector(menuDashboard))
         item("立即刷新", #selector(menuRefresh))
+        m.addItem(.separator())
+        if let f = focusEnd {
+            item("结束专注（还剩 \(Self.mmss(f.timeIntervalSinceNow))）", #selector(menuStopFocus))
+        } else if let r = restEnd {
+            item("跳过休息（还剩 \(Self.mmss(r.timeIntervalSinceNow))）", #selector(menuStopFocus))
+            item("再专注 \(Int(settings.focusMinutes)) 分钟", #selector(menuStartFocus))
+        } else {
+            item("🍅 开始专注 \(Int(settings.focusMinutes)) 分钟", #selector(menuStartFocus))
+        }
         m.addItem(.separator())
         item("重新读取桌面版登录", #selector(menuDesktopLogin))
         item("登录 / 切换 claude.ai 账号…", #selector(menuLogin))
@@ -790,6 +1091,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, NSW
     }
 
     @objc private func menuShow() { togglePopover() }
+    @objc private func menuStartFocus() { startFocus() }
+    @objc private func menuStopFocus() { stopFocus() }
     @objc private func menuDashboard() { openDashboard() }
     @objc private func menuSettings() { openSettings() }
     @objc private func menuRefresh() { Task { await model.refreshUsage(); say("刷新好啦") } }

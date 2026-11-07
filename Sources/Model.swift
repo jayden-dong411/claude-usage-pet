@@ -39,6 +39,8 @@ final class AppModel: ObservableObject {
     @Published var face = "hi"
     /// Current frame of the animated figure (nil in sticker mode).
     @Published var frame: NSImage?
+    /// Latest Codex (ChatGPT) limits from ~/.codex logs, shown alongside Claude's.
+    @Published var codex: CodexLimits?
 
     var onChange: (() -> Void)?
     var onTaskFinished: ((SessionInfo) -> Void)?
@@ -69,6 +71,10 @@ final class AppModel: ObservableObject {
         timers.append(Timer.scheduledTimer(withTimeInterval: 90, repeats: true) { [weak self] _ in
             Task { @MainActor in await self?.refreshUsage() }
         })
+        refreshCodex()
+        timers.append(Timer.scheduledTimer(withTimeInterval: 45, repeats: true) { [weak self] _ in
+            Task { @MainActor in self?.refreshCodex() }
+        })
     }
 
     // MARK: Sessions
@@ -92,6 +98,13 @@ final class AppModel: ObservableObject {
         sessions = list
         now = Date()
         onChange?()
+    }
+
+    func refreshCodex() {
+        Task.detached {
+            let c = CodexLimitsReader.read()
+            await MainActor.run { self.codex = c; self.onChange?() }
+        }
     }
 
     // MARK: Usage — current account
@@ -169,6 +182,7 @@ final class AppModel: ObservableObject {
         needsLogin = false
         lastUsageUpdate = Date()
         history.record(snap)
+        SharedUsage.write(snap)            // for other local apps (latest-claude-usage.json)
         onChange?()
         onUsageLoaded?(snap)
     }

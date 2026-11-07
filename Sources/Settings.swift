@@ -42,6 +42,10 @@ final class Settings: ObservableObject {
     @Published var chatter: Bool { didSet { save("chatter", chatter) } }
     @Published var alertWaiting: Bool { didSet { save("alertWaiting", alertWaiting) } }
     @Published var animatedMode: Bool { didSet { save("animatedMode", animatedMode) } }
+    @Published var menuBarIcon: Bool { didSet { save("menuBarIcon", menuBarIcon) } }
+    @Published var focusMinutes: Double { didSet { save("focusMinutes", focusMinutes) } }
+    @Published var sitReminder: Bool { didSet { save("sitReminder", sitReminder) } }
+    @Published var nightReminder: Bool { didSet { save("nightReminder", nightReminder) } }
 
     private init() {
         let d = UserDefaults.standard
@@ -55,6 +59,10 @@ final class Settings: ObservableObject {
         chatter = flag("chatter", true)
         alertWaiting = flag("alertWaiting", true)
         animatedMode = flag("animatedMode", false)
+        menuBarIcon = flag("menuBarIcon", true)
+        focusMinutes = num("focusMinutes", 25)
+        sitReminder = flag("sitReminder", true)
+        nightReminder = flag("nightReminder", true)
     }
 
     private func save(_ key: String, _ value: Any) {
@@ -65,6 +73,7 @@ final class Settings: ObservableObject {
     func reset() {
         scale = 1.0; opacity = 1.0; rotateSeconds = 35
         onlyWithClaude = true; hideInFullscreen = false; chatter = true; alertWaiting = true
+        menuBarIcon = true; focusMinutes = 25; sitReminder = true; nightReminder = true
     }
 }
 
@@ -100,9 +109,18 @@ struct SettingsView: View {
             Section("什么时候出现") {
                 Toggle("只在 Claude 在前台时显示", isOn: $s.onlyWithClaude)
                 Toggle("Claude 全屏时隐藏", isOn: $s.hideInFullscreen)
+                Toggle("在菜单栏显示图标和 5 小时用量", isOn: $s.menuBarIcon)
             }
             Section("提醒") {
                 Toggle("会话等你批准或回复时提醒", isOn: $s.alertWaiting)
+                Toggle("连续使用 2 小时提醒起来活动（之后每 30 分钟）", isOn: $s.sitReminder)
+                Toggle("凌晨 0–5 点还在用时提醒睡觉", isOn: $s.nightReminder)
+                LabeledContent("专注时长") {
+                    HStack {
+                        Slider(value: $s.focusMinutes, in: 10...60, step: 5)
+                        Text("\(Int(s.focusMinutes)) 分钟").monospacedDigit().frame(width: 56, alignment: .trailing)
+                    }
+                }
             }
             HStack {
                 Spacer()

@@ -74,8 +74,8 @@ extension Mood {
         case .crushed, .oops: return .failed
         case .working, .taskStarted: return .running
         case .needsYou: return .waiting
-        case .taskDone: return .jumping
-        case .clicked, .greet, .farewell: return .waving
+        case .taskDone, .hop: return .jumping
+        case .clicked, .greet, .farewell, .petted, .care: return .waving
         }
     }
 }

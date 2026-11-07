@@ -18,6 +18,9 @@ enum Mood: String, CaseIterable {
     case farewell
     case oops
     case needsYou    // a session is waiting for approval / an answer
+    case petted      // mouse rubbed back and forth over her
+    case hop         // double-clicked
+    case care        // sedentary / late-night / focus-break reminders
 
     var faces: [String] {
         switch self {
@@ -56,6 +59,12 @@ enum Mood: String, CaseIterable {
             return ["sorry", "thumbs_down_pout", "question", "facepalm"]
         case .needsYou:
             return ["pat_viewer", "peek_corner", "wave_flag", "question", "shy_peek", "mic", "stare"]
+        case .petted:
+            return ["blush", "shy_peek", "headpat", "love", "heart_hands", "kiss", "giggle"]
+        case .hop:
+            return ["starry", "peace", "kawaii_pose", "happy", "laugh", "wink"]
+        case .care:
+            return ["tea_sip", "pat_viewer", "headpat", "nod", "yawn", "good_night"]
         }
     }
 
@@ -70,6 +79,8 @@ enum Mood: String, CaseIterable {
         case .working: return ["认真工作中，请勿打扰～", "思考中…", "看本小姐的！"]
         case .night: return ["这么晚了还不睡吗？", "呼啊…好困…", "熬夜对皮肤不好哦"]
         case .needsYou: return ["有会话在等你哦～", "快来看看嘛！", "本小姐在这里等你呢"]
+        case .petted: return ["诶嘿嘿…", "别、别摸了啦…", "头发要乱掉了啦！", "哼，就让你摸一下下", "好、好舒服…才没有！"]
+        case .hop: return ["嘿咻～", "跳起来啦！", "看本小姐的弹跳力！"]
         default: return []
         }
     }

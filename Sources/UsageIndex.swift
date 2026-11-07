@@ -255,13 +255,21 @@ final class UsageIndexer: @unchecked Sendable {
 
 // MARK: - Main-thread model for the dashboard
 
+/// Which tool's statistics to show.
+enum StatSource: String, CaseIterable, Identifiable {
+    case claude = "Claude", codex = "Codex", all = "合计"
+    var id: String { rawValue }
+}
+
 @MainActor
 final class DashboardModel: ObservableObject {
-    @Published var days: [String: DayStats] = [:]
+    @Published var days: [String: DayStats] = [:]          // Claude Code
+    @Published var codexDays: [String: DayStats] = [:]     // Codex (ChatGPT)
     @Published var indexing = false
     @Published var progress: Double = 0
     @Published var lastIndexed: Date?
     private var timer: Timer?
+    private var pending = 0
 
     func start() {
         refresh()
@@ -273,14 +281,19 @@ final class DashboardModel: ObservableObject {
     func refresh() {
         guard !indexing else { return }
         indexing = true
+        pending = 2
+        let finish: @MainActor () -> Void = { [weak self] in
+            guard let self else { return }
+            self.pending -= 1
+            if self.pending == 0 { self.indexing = false; self.lastIndexed = Date() }
+        }
         UsageIndexer.shared.run(progress: { [weak self] p in
             Task { @MainActor in self?.progress = p }
         }, done: { [weak self] days in
-            Task { @MainActor in
-                self?.days = days
-                self?.indexing = false
-                self?.lastIndexed = Date()
-            }
+            Task { @MainActor in self?.days = days; finish() }
+        })
+        CodexUsageIndexer.shared.run(progress: { _ in }, done: { [weak self] days in
+            Task { @MainActor in self?.codexDays = days; finish() }
         })
     }
 
@@ -289,19 +302,32 @@ final class DashboardModel: ObservableObject {
         return String(format: "%04d-%02d-%02d", c.year ?? 0, c.month ?? 0, c.day ?? 0)
     }
 
+    func days(for source: StatSource) -> [String: DayStats] {
+        switch source {
+        case .claude: return days
+        case .codex: return codexDays
+        case .all:
+            var out = days
+            for (k, v) in codexDays { out[k, default: DayStats()].merge(v) }
+            return out
+        }
+    }
+
     /// The last `n` days ending today, oldest first (empty days included).
-    func series(_ n: Int) -> [(date: Date, stats: DayStats)] {
+    func series(_ n: Int, _ source: StatSource = .claude) -> [(date: Date, stats: DayStats)] {
+        let all = days(for: source)
         let cal = Calendar.current
         let today = cal.startOfDay(for: Date())
         return (0..<n).reversed().compactMap { i in
             guard let d = cal.date(byAdding: .day, value: -i, to: today) else { return nil }
-            return (d, days[Self.key(d)] ?? DayStats())
+            return (d, all[Self.key(d)] ?? DayStats())
         }
     }
 
-    func total(_ n: Int) -> DayStats {
-        series(n).reduce(into: DayStats()) { $0.merge($1.stats) }
+    func total(_ n: Int, _ source: StatSource = .claude) -> DayStats {
+        series(n, source).reduce(into: DayStats()) { $0.merge($1.stats) }
     }
 
-    var today: DayStats { days[Self.key(Date())] ?? DayStats() }
+    func today(_ source: StatSource) -> DayStats { days(for: source)[Self.key(Date())] ?? DayStats() }
+    var today: DayStats { today(.claude) }
 }
