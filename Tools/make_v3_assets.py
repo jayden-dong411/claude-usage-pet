@@ -64,6 +64,20 @@ def cut_background(img: Image.Image, thr=236, spread=14) -> Image.Image:
     return out.crop(out.getbbox())
 
 
+def fade_sides(px: np.ndarray, share=0.14) -> np.ndarray:
+    """Fades the outer `share` of the width on both sides to transparent (smoothstep), so hair or sleeves
+    that run off the crop don't end in a hard vertical edge."""
+    w = px.shape[1]
+    n = max(1, int(w * share))
+    t = np.linspace(0, 1, n)
+    ramp = t * t * (3 - 2 * t)
+    a = px[:, :, 3].astype(np.float32)
+    a[:, :n] *= ramp[None, :]
+    a[:, -n:] *= ramp[::-1][None, :]
+    px[:, :, 3] = a.astype(np.uint8)
+    return px
+
+
 def main(char_dir: Path, out: Path):
     idx = json.loads((char_dir / "拼接布局与素材索引.json").read_text())
     out.mkdir(parents=True, exist_ok=True)
@@ -89,6 +103,7 @@ def main(char_dir: Path, out: Path):
             fade = int(px.shape[0] * 0.14)
             ramp = np.linspace(1, 0, fade)[:, None]
             px[-fade:, :, 3] = (px[-fade:, :, 3] * ramp).astype(np.uint8)
+            px = fade_sides(px)          # …and the left and right edges, where hair runs off the crop
             bust = Image.fromarray(px, "RGBA")
             bust.save(out / f"face_{name}.png", optimize=True)
             made.append(name)
@@ -100,6 +115,12 @@ def main(char_dir: Path, out: Path):
 
 
 if __name__ == "__main__":
+    # `make_v3_assets.py --fade-sides <dir>`: soften the side edges of already-made face_*.png (run once).
+    if sys.argv[1] == "--fade-sides":
+        for f in sorted(Path(sys.argv[2]).glob("face_*.png")):
+            Image.fromarray(fade_sides(np.asarray(Image.open(f).convert("RGBA")).copy()), "RGBA").save(f, optimize=True)
+            print("faded", f)
+        sys.exit(0)
     if len(sys.argv) > 4:
         THR, SPREAD = int(sys.argv[3]), int(sys.argv[4])
     main(Path(sys.argv[1]), Path(sys.argv[2]))
