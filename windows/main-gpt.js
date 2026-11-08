@@ -10,6 +10,7 @@ const { Foreground } = require('./lib/foreground');
 const { dayKey, UsageIndexer } = require('./lib/indexer');
 const banter = require('./lib/banter');
 const { DuetLink } = require('./lib/duet');
+const { createPlay } = require('./lib/play');
 const { readPeers, codexLive, codexLogs, codexError, writePeer } = require('./lib/peers');
 
 const NAME = 'GPT龙娘';
@@ -50,6 +51,7 @@ const state = {
   face: 'smile', bubble: null, v3face: 'smile', hopAt: 0, shakeAt: 0,
   peers: [], codexError: null, focusEnd: 0, restEnd: 0,
 };
+let play = null;            // picking up, shaking, poking, feeding, chatting (lib/play.js)
 let history, indexer, claudeIndexer, duetLink, reader, foreground;
 let pet, panel, dashboard, settingsWin, tray;
 let prevStatus = new Map();
@@ -225,6 +227,7 @@ function refreshSessions(notifyChanges) {
         react('taskDone', 5, `「${s.name}」这一轮处理结束啦～`);
         notify(NAME, `「${s.name}」这一轮处理结束了`);
       }
+      if (prev === 'waiting' && s.isBusy) play?.resumed();       // you answered; it carries on
       if (s.isWaiting && prev !== 'waiting' && settings.alertWaiting) {
         lastNudge = Date.now();
         notify(NAME, `「${s.name}」${s.waitingLabel}`);          // only while she is hidden
@@ -439,6 +442,7 @@ function menuTemplate() {
     { label: 'Codex 用量统计…', click: openDashboard },
     { label: '立即刷新', click: () => { refreshUsage(); refreshPeers(); say('刷新好啦'); } },
     { type: 'separator' },
+    ...(play ? play.menuItems() : []),
     ...focusItems(),
     { type: 'separator' },
     { label: '打开 ChatGPT 用量页', click: () => shell.openExternal('https://chatgpt.com/codex/settings/usage') },
@@ -479,10 +483,12 @@ function setSetting(key, value) {
 
 ipcMain.on('pet-mouse', (_e, interactive) => { if (pet) pet.setIgnoreMouseEvents(!interactive, { forward: true }); });
 ipcMain.on('pet-click', () => { if (!panel || !panel.isVisible()) react('clicked', 4); openPanel(); });
-ipcMain.on('pet-drag', (_e, { dx, dy }) => { if (!pet) return; const [x, y] = pet.getPosition(); pet.setPosition(x + dx, y + dy); });
-ipcMain.on('pet-drag-end', () => { if (!pet) return; const [x, y] = pet.getPosition(); settings.petPos = { x, y }; saveSettings(); if (panel) panel.hide(); });
+ipcMain.on('pet-drag', (_e, { dx, dy }) => { if (!pet) return; const [x, y] = pet.getPosition(); pet.setPosition(x + dx, y + dy); play?.dragged(); });
+ipcMain.on('pet-drag-end', () => { if (!pet) return; const [x, y] = pet.getPosition(); settings.petPos = { x, y }; saveSettings(); if (panel) panel.hide(); play?.dropped(); });
+ipcMain.on('pet-shake', () => play?.shaken());
+ipcMain.on('pet-hover', () => play?.hovered());
 ipcMain.on('pet-menu', () => Menu.buildFromTemplate(menuTemplate()).popup({ window: pet }));
-ipcMain.on('pet-dblclick', () => { if (panel) panel.hide(); react('hop', 2.4, Math.random() < 0.34 ? pickLine('hop') : null); });
+ipcMain.on('pet-dblclick', () => { if (panel) panel.hide(); if (play?.doubleClicked()) return; react('hop', 2.4, Math.random() < 0.34 ? pickLine('hop') : null); });
 ipcMain.on('pet-petted', () => react('petted', 4, pickLine('petted')));
 ipcMain.on('panel-size', (_e, h) => {
   if (!panel) return;
@@ -626,8 +632,10 @@ app.whenReady().then(async () => {
   setInterval(() => refreshSessions(true), 3000);
   setInterval(refreshUsage, 60e3);
   setInterval(refreshIndex, 180e3);
-  setInterval(() => { tickFace(); updateVisibility(); }, 2000);
-  duetLink = new DuetLink('codex', duetLines, canChat);
+  setInterval(() => { tickFace(); play?.tick(); updateVisibility(); }, 2000);
+  duetLink = new DuetLink('codex', duetLines, canChat, () => ({ bounds: pet.getBounds(), visible: petVisible() }));
+  play = createPlay({ me: 'codex', say, react, quiet: () => !state.bubble, duet: duetLink, bounds: () => pet.getBounds(),
+    vars: () => ({ five: state.usage?.fiveHour ? `${Math.round(state.usage.fiveHour.utilization)}%` : undefined, week: state.usage?.sevenDay ? `${Math.round(state.usage.sevenDay.utilization)}%` : undefined }), moods: () => [mood()] });
   duetLink.start();
   app.on('before-quit', () => duetLink.stop());
   pet.showInactive();

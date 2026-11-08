@@ -342,18 +342,21 @@ final class PetHub: NSObject {
     }
 
     /// Starts a short exchange between the pet in front (or any) and another running pet.
-    func startDuet() {
+    /// `only`: just exchanges of that kind (e.g. "bump", which never plays otherwise); `a` / `b`: the two pets.
+    func startDuet(only: String? = nil, a forcedA: String? = nil, b forcedB: String? = nil) {
         let running = Self.registry.filter(Self.isRunning).map(\.id)
         guard running.count >= 2 else { return }
         let front = displayerID
-        let a = running.contains(front) ? front : running.randomElement()!
-        guard let b = running.filter({ $0 != a }).randomElement() else { return }
+        let a = forcedA ?? (running.contains(front) ? front : running.randomElement()!)
+        guard let b = forcedB ?? running.filter({ $0 != a }).randomElement() else { return }
         var options: [(BanterDuet, String, String)] = []
         for d in Banter.duets {
+            if let only, d.when != only { continue }
+            let ok = { (x: String, y: String) in only != nil || self.condition(d.when, x, y) }
             if let p = d.pair {
                 guard p.count == 2, Set(p) == Set([a, b]) else { continue }
-                if condition(d.when, p[0], p[1]) { options += [(d, p[0], p[1]), (d, p[0], p[1])] }   // pair lines count double
-            } else if condition(d.when, a, b) {
+                if ok(p[0], p[1]) { options += [(d, p[0], p[1]), (d, p[0], p[1])] }   // pair lines count double
+            } else if ok(a, b) {
                 // Condition-specific lines are much more fun when they apply.
                 options += Array(repeating: (d, a, b), count: d.when == "any" ? 1 : 3)
             }

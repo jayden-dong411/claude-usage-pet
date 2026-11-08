@@ -41,6 +41,8 @@ struct DashboardHook {
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, NSWindowDelegate, PetHubClient {
     let model = AppModel()
+    /// Picking up, shaking, poking, feeding, chatting… (../../Sources/PetPlay.swift)
+    private let play = PetPlay(me: Spec.petID)
     let settings = Settings.shared
     private let hub = PetHub.shared
 
@@ -104,6 +106,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, NSW
                 self.updateVisibility()
             }
             self.react(.needsYou, loops: 3, say: "「\(s.name)」\(s.waitingLabel)～")
+        }
+        model.onTaskResumed = { [weak self] s in self?.play.resumed(s.name) }
+        play.say = { [weak self] t, s in self?.say(t, seconds: s) }
+        play.react = { [weak self] m, s in if let mood = Mood(rawValue: m) { self?.react(mood, loops: 1, seconds: s) } }
+        play.quiet = { [weak self] in self?.bubble.isHidden ?? false }
+        play.vars = { [weak self] in self.map { Spec.banterVars($0.model) } ?? [:] }
+        play.moods = { [weak self] in self.map { [$0.baseMood().rawValue] } ?? [] }
+        Timer.scheduledTimer(withTimeInterval: 2, repeats: true) { [weak self] _ in
+            Task { @MainActor in self?.play.tick() }
         }
         settings.onChange = { [weak self] in self?.applySettings() }
         model.start()
@@ -197,10 +208,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, NSW
             if self.popover?.isShown != true { self.react(.clicked, loops: 1) }
             self.togglePopover()
         }
-        petView.onDoubleClick = { [weak self] in self?.hop() }
+        petView.onDoubleClick = { [weak self] in
+            guard let self else { return }
+            if self.play.doubleClicked() { self.popover?.performClose(nil) } else { self.hop() }
+        }
+        petView.onShake = { [weak self] in self?.play.shaken() }
+        petView.onHover = { [weak self] in self?.play.hovered() }
         petView.onPet = { [weak self] in self?.react(.petted, loops: 3, seconds: 3.5, say: Banter.line(Spec.petID, "petted") ?? Mood.petted.lines.randomElement()) }
         petView.petRect = { [weak self] in self?.imageView.frame ?? .zero }
-        petView.onDragStart = { [weak self] in self?.popover?.performClose(nil) }
+        petView.onDragStart = { [weak self] in self?.popover?.performClose(nil); self?.play.dragStarted() }
         petView.onDragMove = { [weak self] dx in
             guard let self, abs(dx) > 0.5 else { return }
             self.v3?.drag(dx)
@@ -214,6 +230,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, NSW
             self.saveOrigin()
             self.moodKey = ""            // pick the base animation again
             self.tickMood()
+            self.play.dragEnded(frame: self.panel.frame)
         }
         petView.menuProvider = { [weak self] in self?.buildMenu() ?? NSMenu() }
 
@@ -631,6 +648,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, NSW
         item("立即刷新", #selector(menuRefresh))
         item("打开 \(Spec.hostName)", #selector(menuOpenHost))
         m.addItem(.separator())
+        play.addItems(to: m)
         hub.addFocusItems(to: m)
         m.addItem(.separator())
         item("设置…", #selector(menuSettings))

@@ -16,7 +16,17 @@ final class PetView: NSView {
     var onDragStart: (() -> Void)?
     var onDragMove: ((CGFloat) -> Void)?
     var onDragEnd: (() -> Void)?
+    /// Shaken left and right while being dragged.
+    var onShake: (() -> Void)?
+    /// The pointer rested on her for a couple of seconds.
+    var onHover: (() -> Void)?
     var menuProvider: (() -> NSMenu)?
+
+    private var shakeDir: CGFloat = 0
+    private var shakeTurns: [Date] = []
+    private var lastShake = Date.distantPast
+    private var hoverWork: DispatchWorkItem?
+    private var hoverAnchor: NSPoint?
 
     private var startMouse = NSPoint.zero
     private var startOrigin = NSPoint.zero
@@ -35,12 +45,26 @@ final class PetView: NSView {
                                        owner: self))
     }
 
-    override func mouseExited(with event: NSEvent) { rubLastX = nil; rubTurns.removeAll() }
+    override func mouseExited(with event: NSEvent) {
+        rubLastX = nil; rubTurns.removeAll()
+        hoverWork?.cancel(); hoverAnchor = nil
+    }
+
+    /// (Re)starts the 2.5 s "resting on her" timer when the pointer settles somewhere new.
+    private func trackHover(_ p: NSPoint) {
+        if let a = hoverAnchor, hypot(p.x - a.x, p.y - a.y) < 6 { return }
+        hoverAnchor = p
+        hoverWork?.cancel()
+        let w = DispatchWorkItem { [weak self] in self?.onHover?() }
+        hoverWork = w
+        DispatchQueue.main.asyncAfter(deadline: .now() + 2.5, execute: w)
+    }
 
     /// Counts left/right turns of the pointer over the figure; 4 turns within 1.6 s = petting.
     override func mouseMoved(with event: NSEvent) {
         let p = convert(event.locationInWindow, from: nil)
-        guard petRect().contains(p) else { rubLastX = nil; return }
+        guard petRect().contains(p) else { rubLastX = nil; hoverWork?.cancel(); hoverAnchor = nil; return }
+        trackHover(p)
         defer { rubLastX = p.x }
         guard let last = rubLastX else { return }
         let dx = p.x - last
@@ -66,6 +90,8 @@ final class PetView: NSView {
         lastX = startMouse.x
         startOrigin = window?.frame.origin ?? .zero
         dragging = false
+        hoverWork?.cancel()
+        shakeTurns.removeAll(); shakeDir = 0
     }
 
     override func mouseDragged(with event: NSEvent) {
@@ -74,8 +100,21 @@ final class PetView: NSView {
         if !dragging && hypot(dx, dy) > 3 { dragging = true; onDragStart?() }
         if dragging {
             window?.setFrameOrigin(NSPoint(x: startOrigin.x + dx, y: startOrigin.y + dy))
-            onDragMove?(p.x - lastX)
+            let step = p.x - lastX
+            onDragMove?(step)
             lastX = p.x
+            // 5 quick changes of direction within 1.2 s = shaken.
+            if abs(step) > 4 {
+                let dir: CGFloat = step > 0 ? 1 : -1
+                if shakeDir != 0 && dir != shakeDir {
+                    let now = Date()
+                    shakeTurns = shakeTurns.filter { now.timeIntervalSince($0) < 1.2 } + [now]
+                    if shakeTurns.count >= 5 && now.timeIntervalSince(lastShake) > 5 {
+                        lastShake = now; shakeTurns.removeAll(); onShake?()
+                    }
+                }
+                shakeDir = dir
+            }
         }
     }
 

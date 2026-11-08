@@ -17,8 +17,8 @@ class DuetLink {
    * @param onLines   (myLines, totalSeconds) → show the pet and say them at their delays
    * @param canChat   () → true when a duet may start now (setting on, user around, not focusing)
    */
-  constructor(me, onLines, canChat) {
-    this.me = me; this.onLines = onLines; this.canChat = canChat;
+  constructor(me, onLines, canChat, info = () => ({})) {
+    this.me = me; this.onLines = onLines; this.canChat = canChat; this.info = info;   // info() → { bounds, visible }
     this.seen = 0; this.timer = null;
     this.nextDuet = Date.now() + (150 + Math.random() * 150) * 1000;
   }
@@ -46,13 +46,29 @@ class DuetLink {
     return v?.length ? Math.max(...v) : null;
   }
 
-  startDuet() {
+  /** Dropped onto the other pet (both visible and overlapping): a short "bump" exchange. */
+  bump(bounds) {
+    if (!bounds) return false;
+    const shrink = (r) => ({ x: r.x + 30, y: r.y + 40, w: r.width - 60, h: r.height - 80 });
+    const m = shrink(bounds);
+    for (const p of this.alive()) {
+      if (p === this.me) continue;
+      let o = null;
+      try { o = JSON.parse(fs.readFileSync(this.file(`alive-${p}.json`), 'utf8')); } catch { continue; }
+      if (!o.visible || !o.bounds) continue;
+      const r = shrink(o.bounds);
+      if (m.x < r.x + r.w && r.x < m.x + m.w && m.y < r.y + r.h && r.y < m.y + m.h) return this.startDuet('bump', this.me, p);
+    }
+    return false;
+  }
+
+  startDuet(only, forcedA, forcedB) {
     const pets = this.alive();
     if (pets.length < 2) return false;
-    const a = pets.includes(this.me) && Math.random() < 0.5 ? this.me : pets[Math.floor(Math.random() * pets.length)];
+    const a = forcedA || (pets.includes(this.me) && Math.random() < 0.5 ? this.me : pets[Math.floor(Math.random() * pets.length)]);
     const others = pets.filter((p) => p !== a);
-    const b = others[Math.floor(Math.random() * others.length)];
-    const lines = banter.duet(a, b, (id) => this.usage(id));
+    const b = forcedB || others[Math.floor(Math.random() * others.length)];
+    const lines = banter.duet(a, b, (id) => this.usage(id), only);
     if (!lines) return false;
     let id = 0;
     try { id = JSON.parse(fs.readFileSync(this.file('duet.json'), 'utf8')).id || 0; } catch {}
@@ -61,7 +77,7 @@ class DuetLink {
   }
 
   tick() {
-    try { fs.writeFileSync(this.file(`alive-${this.me}.json`), JSON.stringify({ at: Date.now() })); } catch {}
+    try { fs.writeFileSync(this.file(`alive-${this.me}.json`), JSON.stringify({ at: Date.now(), ...this.info() })); } catch {}
     const leader = this.alive()[0] === this.me;
     if (leader) {
       let now = false;

@@ -21,6 +21,8 @@ let claudeBundleID = "com.anthropic.claudefordesktop"
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, NSWindowDelegate, PetHubClient {
     let model = AppModel()
+    /// Picking up, shaking, poking, feeding, chatting… (PetPlay.swift)
+    private let play = PetPlay(me: "claude")
     let dashboard = DashboardModel()
     let settings = Settings.shared
 
@@ -111,6 +113,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, NSW
             self.closeLogin()
             self.react(.greet, say: "另一个账号（\(s.account ?? "")）也接上啦～")
         }
+        model.onTaskResumed = { [weak self] s in self?.play.resumed(s.name) }
+        play.say = { [weak self] t, s in self?.say(t, seconds: s) }
+        play.react = { [weak self] m, s in if let mood = Mood(rawValue: m) { self?.react(mood, seconds: s) } }
+        play.quiet = { [weak self] in self?.bubble.isHidden ?? false }
+        play.vars = { [weak self] in self?.banterVars() ?? [:] }
+        play.moods = { [weak self] in self?.baseMoods().map(\.rawValue) ?? [] }
         settings.onChange = { [weak self] in self?.applySettings() }
         model.start()
         dashboard.start()
@@ -119,6 +127,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, NSW
         faceTimer = Timer.scheduledTimer(withTimeInterval: 2, repeats: true) { [weak self] _ in
             Task { @MainActor in
                 self?.tickFace()
+                self?.play.tick()
                 self?.updateVisibility()
             }
         }
@@ -291,18 +300,25 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, NSW
             if self.popover?.isShown != true { self.react(.clicked, seconds: 4) }
             self.togglePopover()
         }
-        petView.onDoubleClick = { [weak self] in self?.hop() }
+        petView.onDoubleClick = { [weak self] in
+            guard let self else { return }
+            if self.play.doubleClicked() { self.popover?.performClose(nil) } else { self.hop() }
+        }
+        petView.onShake = { [weak self] in self?.play.shaken() }
+        petView.onHover = { [weak self] in self?.play.hovered() }
         petView.onPet = { [weak self] in
             guard let self else { return }
             self.react(.petted, seconds: 4, say: Banter.line("claude", "petted") ?? Mood.petted.lines.randomElement())
         }
         petView.petRect = { [weak self] in self?.imgRect ?? .zero }
-        petView.onDragStart = { [weak self] in self?.popover?.performClose(nil) }
+        petView.onDragStart = { [weak self] in self?.popover?.performClose(nil); self?.play.dragStarted() }
         petView.onDragMove = { [weak self] dx in self?.animator?.drag(dx); self?.v3?.drag(dx) }
         petView.onDragEnd = { [weak self] in
-            self?.saveOrigin()
-            self?.animator?.endDrag()
-            self?.v3?.endDrag()
+            guard let self else { return }
+            self.saveOrigin()
+            self.animator?.endDrag()
+            self.v3?.endDrag()
+            self.play.dragEnded(frame: self.panel.frame)
         }
         petView.menuProvider = { [weak self] in self?.buildMenu() ?? NSMenu() }
 
@@ -854,6 +870,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, NSW
         item("用量统计…", #selector(menuDashboard))
         item("立即刷新", #selector(menuRefresh))
         m.addItem(.separator())
+        play.addItems(to: m)
         hub.addFocusItems(to: m)
         m.addItem(.separator())
         item("重新读取桌面版登录", #selector(menuDesktopLogin))

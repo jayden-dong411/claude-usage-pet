@@ -23,6 +23,7 @@ final class AppModel: ObservableObject {
     var onTaskFinished: ((SessionInfo) -> Void)?
     var onTaskStarted: ((SessionInfo) -> Void)?
     var onTaskWaiting: ((SessionInfo) -> Void)?
+    var onTaskResumed: ((SessionInfo) -> Void)?
 
     private var prevStatus: [String: String] = [:]
     private var busyReading = false
@@ -74,6 +75,7 @@ final class AppModel: ObservableObject {
         if notify && !prevStatus.isEmpty {
             for s in list where prevStatus[s.id] == "busy" && s.status == "idle" { onTaskFinished?(s) }
             for s in list where s.isWaiting && prevStatus[s.id] != "waiting" { onTaskWaiting?(s) }
+            for s in list where prevStatus[s.id] == "waiting" && s.isBusy { onTaskResumed?(s) }
             if let s = list.first(where: { $0.isBusy && prevStatus[$0.id] != "busy" }) { onTaskStarted?(s) }
         }
         prevStatus = Dictionary(list.map { ($0.id, $0.status) }, uniquingKeysWith: { a, _ in a })

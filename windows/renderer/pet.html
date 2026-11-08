@@ -54,18 +54,27 @@
   });
 
   // Clicks pass through transparent areas; only the drawn parts take the mouse.
-  let over = false, down = null, moved = 0;
+  let over = false, down = null, moved = 0, shakeDir = 0, shakeTurns = [], lastShake = 0;
   document.addEventListener('mousemove', (e) => {
     const hit = !!e.target.closest?.('.hit');
     if (hit !== over && !down) { over = hit; window.pet.mouse(hit); }
     if (down) {
       const dx = e.screenX - down.x, dy = e.screenY - down.y;
       if (dx || dy) { moved += Math.abs(dx) + Math.abs(dy); down = { x: e.screenX, y: e.screenY }; if (moved > 3) window.pet.drag(dx, dy); }
+      // Shaken: 5 quick changes of direction within 1.2 s while dragging.
+      if (moved > 3 && Math.abs(dx) > 4) {
+        const dir = dx > 0 ? 1 : -1, now = Date.now();
+        if (shakeDir && dir !== shakeDir) {
+          shakeTurns = shakeTurns.filter((t) => now - t < 1200).concat(now);
+          if (shakeTurns.length >= 5 && now - lastShake > 5000) { lastShake = now; shakeTurns = []; window.pet.shake(); }
+        }
+        shakeDir = dir;
+      }
     }
   });
   document.addEventListener('mousedown', (e) => {
     if (e.button !== 0 || !e.target.closest?.('.hit')) return;
-    down = { x: e.screenX, y: e.screenY }; moved = 0;
+    down = { x: e.screenX, y: e.screenY }; moved = 0; shakeDir = 0; shakeTurns = []; clearTimeout(hoverTimer);
   });
   // A second click within 0.3 s is a double-click (jump); otherwise the click fires after that wait.
   let pendingClick = null;
@@ -93,7 +102,16 @@
     }
     rubX = e.screenX;
   });
-  $('face').addEventListener('mouseleave', () => { rubX = null; turns = []; });
+  $('face').addEventListener('mouseleave', () => { rubX = null; turns = []; clearTimeout(hoverTimer); hoverAt = null; });
+  // The pointer resting on her for 2.5 s.
+  let hoverTimer = null, hoverAt = null;
+  $('face').addEventListener('mousemove', (e) => {
+    if (down) return;
+    if (hoverAt && Math.hypot(e.screenX - hoverAt.x, e.screenY - hoverAt.y) < 6) return;
+    hoverAt = { x: e.screenX, y: e.screenY };
+    clearTimeout(hoverTimer);
+    hoverTimer = setTimeout(() => window.pet.hover(), 2500);
+  });
   document.addEventListener('contextmenu', (e) => { if (e.target.closest?.('.hit')) { e.preventDefault(); window.pet.menu(); } });
   document.addEventListener('mouseleave', () => { if (!down) { over = false; window.pet.mouse(false); } });
 </script>

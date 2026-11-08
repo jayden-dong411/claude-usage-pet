@@ -37,6 +37,7 @@ final class AppModel: ObservableObject {
     var onTaskFinished: ((SessionInfo) -> Void)?
     var onTaskStarted: ((SessionInfo) -> Void)?
     var onTaskWaiting: ((SessionInfo) -> Void)?
+    var onTaskResumed: ((SessionInfo) -> Void)?
 
     let history = UsageHistory()
     private let reader = CodexReader()
@@ -118,6 +119,7 @@ final class AppModel: ObservableObject {
                 let prev = prevStatus[s.id]
                 if prev == "busy" && s.status == "idle" { onTaskFinished?(s) }
                 if s.isWaiting && prev != "waiting" { onTaskWaiting?(s) }
+                if prev == "waiting" && s.isBusy { onTaskResumed?(s) }
             }
             if let s = list.first(where: { $0.isBusy && prevStatus[$0.id] != "busy" && prevStatus[$0.id] != "waiting" }) {
                 onTaskStarted?(s)

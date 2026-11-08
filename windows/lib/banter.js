@@ -68,8 +68,12 @@ function chatter(pet, moods, vars) {
 
 const name = (pet) => load().pets[pet]?.name || pet;
 
+/** Snacks for 「投喂」: { name, emoji, fav }. */
+const foods = (pet) => (load().pets[pet]?.foods || []).filter((f) => f.length >= 2).map((f) => ({ name: f[0], emoji: f[1], fav: f[2] === 'fav' }));
+
 /** Builds a duet between pets a and b; usage(id) → highest limit in use (or null). */
-function duet(a, b, usage) {
+/** `only`: just exchanges of that kind (e.g. 'bump', which never plays otherwise). */
+function duet(a, b, usage, only) {
   const h = new Date().getHours(), wd = new Date().getDay();
   const cond = (when, x, y) => {
     const px = usage(x), py = usage(y);
@@ -89,11 +93,13 @@ function duet(a, b, usage) {
     }
   };
   const options = [];
+  const ok = (when, x, y) => (only ? true : cond(when, x, y));
   for (const d of load().duets || []) {
+    if (only && d.when !== only) continue;
     if (Array.isArray(d.pair)) {
       if (d.pair.length !== 2 || !d.pair.includes(a) || !d.pair.includes(b) || a === b) continue;
-      if (cond(d.when, d.pair[0], d.pair[1])) options.push([d, d.pair[0], d.pair[1]], [d, d.pair[0], d.pair[1]]);
-    } else if (cond(d.when, a, b)) {
+      if (ok(d.when, d.pair[0], d.pair[1])) options.push([d, d.pair[0], d.pair[1]], [d, d.pair[0], d.pair[1]]);
+    } else if (ok(d.when, a, b)) {
       for (let i = 0; i < (d.when === 'any' ? 1 : 3); i++) options.push([d, a, b]);
     }
   }
@@ -112,4 +118,4 @@ function duet(a, b, usage) {
   return lines;
 }
 
-module.exports = { chatter, line, duet, name, fill };
+module.exports = { chatter, line, duet, name, fill, foods };

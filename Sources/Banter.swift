@@ -19,6 +19,7 @@ enum Banter {
         var moods: [String: [String]]
         var time: [String: [String]]
         var idle: [String]
+        var foods: [[String]]?
     }
 
     private static var pets: [String: PetLines] = [:]
@@ -43,6 +44,12 @@ enum Banter {
     }
 
     static var available: Bool { load(); return !pets.isEmpty }
+
+    /// Snacks for 「投喂」: name, emoji and whether it is her favourite.
+    static func foods(_ pet: String) -> [(name: String, emoji: String, fav: Bool)] {
+        load()
+        return (pets[pet]?.foods ?? []).compactMap { $0.count >= 2 ? (name: $0[0], emoji: $0[1], fav: $0.count > 2 && $0[2] == "fav") : nil }
+    }
 
     static func name(_ pet: String) -> String {
         load()

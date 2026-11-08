@@ -10,5 +10,7 @@ contextBridge.exposeInMainWorld('pet', {
   menu: () => ipcRenderer.send('pet-menu'),
   dblclick: () => ipcRenderer.send('pet-dblclick'),
   petted: () => ipcRenderer.send('pet-petted'),
+  shake: () => ipcRenderer.send('pet-shake'),
+  hover: () => ipcRenderer.send('pet-hover'),
   panelSize: (h) => ipcRenderer.send('panel-size', h),
 });

@@ -46,6 +46,7 @@ final class AppModel: ObservableObject {
     var onTaskFinished: ((SessionInfo) -> Void)?
     var onTaskStarted: ((SessionInfo) -> Void)?
     var onTaskWaiting: ((SessionInfo) -> Void)?
+    var onTaskResumed: ((SessionInfo) -> Void)?
     var onUsageLoaded: ((UsageSnapshot) -> Void)?
     var onSecondaryLoaded: ((UsageSnapshot) -> Void)?
 
@@ -95,6 +96,7 @@ final class AppModel: ObservableObject {
                 let prev = prevStatus[s.id]
                 if prev == "busy" && (s.status == "idle" || s.status == "shell") { onTaskFinished?(s) }
                 if s.isWaiting && prev != "waiting" { onTaskWaiting?(s) }
+                if prev == "waiting" && s.isBusy { onTaskResumed?(s) }      // you answered; it carries on
             }
             // Idle -> busy, or a brand-new session that is already working (not a resume after approval).
             if let s = list.first(where: { $0.isBusy && prevStatus[$0.id] != "busy" && prevStatus[$0.id] != "waiting" }) {

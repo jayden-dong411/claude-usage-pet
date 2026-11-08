@@ -23,6 +23,7 @@ final class AppModel: ObservableObject {
     var onTaskFinished: ((SessionInfo) -> Void)?
     var onTaskStarted: ((SessionInfo) -> Void)?
     var onTaskWaiting: ((SessionInfo) -> Void)?
+    var onTaskResumed: ((SessionInfo) -> Void)?
 
     private var prevStatus: [String: String] = [:]
     private var busyReading = false

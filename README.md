@@ -114,6 +114,12 @@
 - 每只桌宠有自己的性格和台词（大小姐傲娇、龙娘温柔、Grok娘吐槽、DeepSeek娘精打细算），一共五百多句：按当前状态（额度充足 / 紧张 / 见底、有任务在跑、会话等你、深夜）、时间段（早上、午饭、下午茶、晚上、快半夜）、星期（周一、周五、周末）挑，偶尔插一句冷知识或玩笑，会带上实时的额度数字；说过的话要隔十几句才会再说。
 - **说话频率**：安静（约 90 秒一句）/ 适中（约 30 秒，默认）/ 话痨（约 15 秒）。
 - **桌宠之间聊天**：开着两只以上桌宠时，每隔 7–15 分钟（你在用电脑、没在专注时）会挑两只聊几句，另一只会出来一会儿再回去；会看彼此的额度说话，比如一只额度快用完时另一只说「交给我吧」。不想被打扰可以在设置里关掉。
+- **和她互动**（四只桌宠都有，Mac 和 Windows 都支持）：
+  - 拖起来她会喊一声，放下会评价新位置；拖着来回晃会晕；连续双击三次会生气「别戳了！」；鼠标在她身上停两秒她会问你怎么了；摸头会害羞。
+  - 右键「投喂」：每只有自己的零食，喂到最爱的会特别开心（大小姐爱红茶、龙娘爱热可可、Grok娘爱冰美式、DeepSeek娘爱小鱼干），一小时喂太多会说吃不下。
+  - 右键「陪我聊聊」：马上说句话，或者讲个冷知识 / 笑话。
+  - 你批准了等待中的会话，它继续干活时她会说「收到！继续～」；离开电脑 10 分钟以上回来时会说「欢迎回来」。
+  - 把一只桌宠拖到另一只身上（两只都在屏幕上时），她们会互相打招呼、斗两句嘴。
 - 台词都在 `Assets/banter.json` 里，Mac 版和 Windows 版共用，想加自己的台词直接改这个文件再重新构建即可。
 
 ### v3 小人（Mac 版）
@@ -247,6 +253,7 @@ npm run dist:win:gpt            # 打包 GPT龙娘（配置在 build-gpt.json）
 | `lib/foreground.js` | 用常驻 PowerShell 检测前台程序和是否全屏 |
 | `lib/sessions.js` / `lib/indexer.js` / `lib/history.js` | 会话与步骤进度、每日统计、用量预测（和 Mac 版同一套规则） |
 | `lib/expressions.js` | 表情分组（由 `gen-expressions.py` 从 `Sources/Expressions.swift` 生成） |
+| `lib/play.js` | 互动：拖动、摇晃、连戳、悬停、投喂、陪聊、欢迎回来、两只桌宠相撞 |
 | `lib/banter.js` / `lib/duet.js` | 台词（读 `Assets/banter.json`）；两只 Windows 桌宠之间的聊天（通过 `%APPDATA%\AIPets` 里的文件） |
 | `lib/peers.js` | 「其他额度」：Codex 实时额度、Grok Bot、DeepSeek 余额；两只桌宠通过 `%APPDATA%\AIPets\*.json` 互相共享额度 |
 | `renderer/` | 桌宠、面板、用量统计、设置四个界面 |
@@ -274,6 +281,7 @@ Sources/
   PetHub.swift         菜单栏总览、番茄钟和提醒（多只桌宠之间同步）
   PetChrome.swift      桌宠窗口里的视图（点击、双击、摸头、拖动），面板超出屏幕时滚动
   Banter.swift         读取台词库，按状态 / 时间挑一句；桌宠之间的对话
+  PetPlay.swift        互动：拖动、摇晃、连戳、悬停、投喂、陪聊、欢迎回来、桌宠相撞
 Tools/strip_outline.swift   构建时去掉贴图白边
 Tools/make_v3_assets.py     从 ai-chan-sheets 设定图切出 v3 表情并去掉白底
 Assets/daxiaojie/head/      80 张表情（CC BY-NC-SA 4.0）
