@@ -89,11 +89,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, NSW
         forceV3 = snapshotMode && CommandLine.arguments.contains("--v3")
         buildPanel()
         model.onChange = { [weak self] in self?.refreshPet() }
-        model.onTaskFinished = { [weak self] s in self?.react(.taskDone, loops: 2, say: "「\(s.name)」完成了哦～") }
+        model.onTaskFinished = { [weak self] s in
+            guard let self else { return }
+            if !self.panel.isVisible { self.hub.notify(title: Banter.name(Spec.petID), body: "「\(s.name)」这一轮处理结束了") }
+            self.react(.taskDone, loops: 2, say: "「\(s.name)」这一轮处理结束啦～")
+        }
         model.onTaskStarted = { [weak self] s in self?.react(.taskStarted, loops: 1, say: "「\(s.name)」开工！") }
         model.onTaskWaiting = { [weak self] s in
             guard let self, self.settings.alertWaiting else { return }
             self.lastNudge = Date()
+            if !self.panel.isVisible {
+                self.hub.notify(title: Banter.name(Spec.petID), body: "「\(s.name)」\(s.waitingLabel)")
+                self.forceShowUntil = Date().addingTimeInterval(8)
+                self.updateVisibility()
+            }
             self.react(.needsYou, loops: 3, say: "「\(s.name)」\(s.waitingLabel)～")
         }
         settings.onChange = { [weak self] in self?.applySettings() }

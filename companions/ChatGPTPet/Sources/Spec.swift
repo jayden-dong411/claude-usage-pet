@@ -39,7 +39,7 @@ enum Spec {
     static func pill(_ m: AppModel) -> String {
         guard let u = m.usage else { return "5h —  ·  周 —" }
         let f = { (w: LimitWindow?) in w.map { "\(Int($0.utilization.rounded()))%" } ?? "—" }
-        return "5h \(f(u.fiveHour))  ·  周 \(f(u.sevenDay))"
+        return "5h \(f(u.fiveHour))  ·  周 \(f(u.sevenDay))" + (m.usageStale ? " ⚠︎" : "")
     }
 
     static func hasUsage(_ m: AppModel) -> Bool { m.usage != nil }

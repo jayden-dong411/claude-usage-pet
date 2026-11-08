@@ -1,6 +1,7 @@
 import AppKit
 import Combine
 import SwiftUI
+import UserNotifications
 
 // Coordination between the four local pets (Claude大小姐, GPT龙娘, Grok娘, DeepSeek娘), which run as
 // separate apps but should behave like one:
@@ -57,6 +58,8 @@ final class HubSettings: ObservableObject {
     @Published var chatterSeconds: Double { didSet { d.set(chatterSeconds, forKey: "chatterSeconds") } }
     /// Pets now and then talk to each other (the other one pops up for a moment).
     @Published var petChat: Bool { didSet { d.set(petChat, forKey: "petChat") } }
+    /// While a pet is hidden (its AI app isn't in front), task events also go to Notification Center.
+    @Published var notifyHidden: Bool { didSet { d.set(notifyHidden, forKey: "notifyHidden") } }
 
     private init() {
         let d = UserDefaults(suiteName: "local.aipets.shared") ?? .standard
@@ -66,6 +69,7 @@ final class HubSettings: ObservableObject {
         menuBarIcon = d.object(forKey: "menuBarIcon") == nil ? true : d.bool(forKey: "menuBarIcon")
         chatterSeconds = d.object(forKey: "chatterSeconds") == nil ? 30 : d.double(forKey: "chatterSeconds")
         petChat = d.object(forKey: "petChat") == nil ? true : d.bool(forKey: "petChat")
+        notifyHidden = d.object(forKey: "notifyHidden") == nil ? true : d.bool(forKey: "notifyHidden")
     }
 
     /// Picks up changes made in another pet's settings window.
@@ -75,7 +79,7 @@ final class HubSettings: ObservableObject {
         let cs = d.object(forKey: "chatterSeconds") == nil ? 30 : d.double(forKey: "chatterSeconds")
         if cs != chatterSeconds { chatterSeconds = cs }
         for (key, path) in [("sitReminder", \HubSettings.sitReminder), ("nightReminder", \.nightReminder), ("menuBarIcon", \.menuBarIcon),
-                            ("petChat", \.petChat)] {
+                            ("petChat", \.petChat), ("notifyHidden", \.notifyHidden)] {
             let v = d.object(forKey: key) == nil ? true : d.bool(forKey: key)
             if self[keyPath: path] != v { self[keyPath: path] = v }
         }
@@ -97,6 +101,7 @@ struct HubSettingsSection: View {
                 Text("话痨（约 15 秒一句）").tag(15.0)
             }
             Toggle("桌宠之间偶尔聊天（会把另一只叫出来一会儿）", isOn: $s.petChat)
+            Toggle("桌宠隐藏时用系统通知提醒（等你回复、一轮处理结束）", isOn: $s.notifyHidden)
             LabeledContent("专注时长") {
                 HStack {
                     Slider(value: $s.focusMinutes, in: 10...60, step: 5)
@@ -283,15 +288,35 @@ final class PetHub: NSObject {
         save()
     }
 
+    // MARK: Notifications
+
+    private var askedNotify = false
+
+    /// Posts to Notification Center (asks for permission the first time). Clicking it opens this pet's panel.
+    func notify(title: String, body: String) {
+        guard settings.notifyHidden, !CommandLine.arguments.contains("--snapshot") else { return }
+        let c = UNUserNotificationCenter.current()
+        if !askedNotify {
+            askedNotify = true
+            c.delegate = self
+            c.requestAuthorization(options: [.alert, .sound]) { _, _ in }
+        }
+        let n = UNMutableNotificationContent()
+        n.title = title
+        n.body = body
+        n.sound = .default
+        c.add(UNNotificationRequest(identifier: UUID().uuidString, content: n, trigger: nil))
+    }
+
     // MARK: Duets (leader only)
 
     /// Highest limit in use for a pet's provider, if known.
     private func usagePercent(_ id: String) -> Double? {
         let u: PeerUsage?
         switch id {
-        case "claude": u = PeerStore.read("claude", maxAge: 1800)
-        case "codex": u = PeerStore.read("codex", maxAge: 1800)
-        case "grok": u = GrokBotPeer.read()
+        case "claude": u = PeerStore.read("claude", maxAge: petStaleAfter)
+        case "codex": u = PeerStore.read("codex", maxAge: petStaleAfter)
+        case "grok": u = GrokBotPeer.read().flatMap { Date().timeIntervalSince($0.observedAt) < 6 * 3600 ? $0 : nil }   // weekly, cached by Grok Bot
         default: u = nil
         }
         return u?.windows.map(\.utilization).max()
@@ -498,9 +523,11 @@ final class PetHub: NSObject {
             return out
         }
         // Only Claude's 5-hour limit (the user's choice); the overview has the rest.
-        let five = peers.first { $0.provider == "claude" }?.windows.first
-        out.append(NSAttributedString(string: "5h " + (five.map { "\(Int($0.utilization.rounded()))%" } ?? "—"),
-                                      attributes: [.font: font]))
+        let claude = peers.first { $0.provider == "claude" }
+        let five = claude?.windows.first
+        let old = claude.map { Date().timeIntervalSince($0.observedAt) > petStaleAfter } ?? false
+        out.append(NSAttributedString(string: "5h " + (five.map { "\(Int($0.utilization.rounded()))%" } ?? "—") + (old ? "?" : ""),
+                                      attributes: [.font: font, .foregroundColor: old ? NSColor.secondaryLabelColor : NSColor.labelColor]))
         return out
     }
 
@@ -572,5 +599,18 @@ struct HubOverview: View {
         .frame(width: 360)
         .fitsScreen()
         .onReceive(tick) { now = $0 }
+    }
+}
+
+extension PetHub: UNUserNotificationCenterDelegate {
+    nonisolated func userNotificationCenter(_ center: UNUserNotificationCenter, didReceive response: UNNotificationResponse,
+                                            withCompletionHandler completionHandler: @escaping () -> Void) {
+        Task { @MainActor in self.client?.hubShowPanel() }
+        completionHandler()
+    }
+
+    nonisolated func userNotificationCenter(_ center: UNUserNotificationCenter, willPresent notification: UNNotification,
+                                            withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions) -> Void) {
+        completionHandler([.banner, .sound])
     }
 }

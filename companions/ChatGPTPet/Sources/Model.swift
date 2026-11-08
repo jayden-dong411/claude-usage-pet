@@ -44,6 +44,8 @@ final class AppModel: ObservableObject {
     private var live: UsageSnapshot?
     /// Why the live query failed, if it did.
     @Published var liveError: String?
+    /// The reading on screen is over 10 minutes old (live query failing and the logs are old).
+    var usageStale: Bool { usage.map { Date().timeIntervalSince($0.observedAt) > petStaleAfter } ?? false }
     private var prevStatus: [String: String] = [:]
     private var timer: Timer?
     private var busyReading = false
@@ -67,16 +69,16 @@ final class AppModel: ObservableObject {
             await MainActor.run {
                 self.liveError = l == nil ? err : nil
                 guard let l else { return }
-                var s = UsageSnapshot(fiveHour: LimitWindow(utilization: l.fiveHour, resetsAt: l.fiveReset),
-                                      sevenDay: LimitWindow(utilization: l.week, resetsAt: l.weekReset),
+                var s = UsageSnapshot(fiveHour: l.fiveHour.map { LimitWindow(utilization: $0, resetsAt: l.fiveReset) },
+                                      sevenDay: l.week.map { LimitWindow(utilization: $0, resetsAt: l.weekReset) },
                                       source: "ChatGPT 账号", observedAt: l.at)
                 s.plan = l.plan
                 s.account = "live"          // separate history series from the log readings
                 self.live = s
                 PeerStore.write(PeerUsage(          // let the other pets show it too
                     provider: "codex", title: "ChatGPT · Codex", plan: s.plan,
-                    windows: [PeerWindow(label: "5 小时", utilization: l.fiveHour, resetsAt: l.fiveReset),
-                              PeerWindow(label: "每周", utilization: l.week, resetsAt: l.weekReset)],
+                    windows: [l.fiveHour.map { PeerWindow(label: "5 小时", utilization: $0, resetsAt: l.fiveReset) },
+                              l.week.map { PeerWindow(label: "每周", utilization: $0, resetsAt: l.weekReset) }].compactMap { $0 },
                     observedAt: l.at))
                 self.refresh(notify: false)
             }

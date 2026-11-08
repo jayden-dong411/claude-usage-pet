@@ -41,7 +41,7 @@ class DuetLink {
   }
 
   usage(id) {
-    const u = readPeer(id, 1800e3);
+    const u = readPeer(id, 600e3);           // only fresh readings: no "交给我吧" from old numbers
     const v = u?.windows?.map((w) => w.utilization);
     return v?.length ? Math.max(...v) : null;
   }

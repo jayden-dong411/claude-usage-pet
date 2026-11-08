@@ -157,6 +157,20 @@ final class Chip: NSView {
     }
 }
 
+// MARK: - Age of a reading
+
+/// "刚刚" / "12 分钟前" / "3 小时前" / "2 天前".
+func petAgo(_ d: Date, now: Date = Date()) -> String {
+    let s = max(0, now.timeIntervalSince(d))
+    if s < 60 { return "刚刚" }
+    if s < 3600 { return "\(Int(s / 60)) 分钟前" }
+    if s < 86400 { return "\(Int(s / 3600)) 小时前" }
+    return "\(Int(s / 86400)) 天前"
+}
+
+/// Readings older than this are shown greyed out, without a forecast.
+let petStaleAfter: TimeInterval = 600
+
 // MARK: - Panels that never run off the screen
 
 /// Shows the panel at its natural height, but scrolls once it is taller than the screen (with

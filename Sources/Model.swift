@@ -59,6 +59,13 @@ final class AppModel: ObservableObject {
     static let secondaryStoreID = UUID(uuidString: "6D0C1A2E-5B7F-4C1E-9A3D-2F8E7B6C5D40")!
 
     var level: Int { Doro.level(for: usage) }
+    /// Showing an old reading: the last refresh failed, or the reading is over 10 minutes old.
+    var usageStale: Bool {
+        guard usage != nil else { return false }
+        if usageError != nil { return true }
+        guard let t = lastUsageUpdate else { return true }
+        return Date().timeIntervalSince(t) > petStaleAfter
+    }
     var busyCount: Int { sessions.filter(\.isBusy).count }
     var waitingSessions: [SessionInfo] { sessions.filter(\.isWaiting) }
 

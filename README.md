@@ -180,7 +180,7 @@
 | 账号用量（5 小时 / 每周） | 依次尝试：① Claude 桌面版的 claude.ai 登录（读取它的 cookie，只读；Mac 需要一次钥匙串授权，Windows 用系统的 DPAPI 解密）；② Claude Code 的登录令牌（Mac 在钥匙串，Windows 在 `%USERPROFILE%\.claude\.credentials.json`；只读，过期就跳过）；③ 在应用里单独登录的 claude.ai。查询的是 claude.ai 自己的用量接口。 |
 | 正在进行的任务 | `~/.claude/sessions/*.json`（每个 Claude Code 会话都会写，含状态 busy / waiting / idle） |
 | 任务步骤进度 | 会话记录里的任务清单（update_plan / TodoWrite） |
-| 每日 token 和使用时长 | `~/.claude/projects/**/*.jsonl` 会话记录：token 取每条回复的 `usage`（按消息 id 去重）；使用时长按同一会话中相邻记录间隔 ≤ 5 分钟累计 |
+| 每日 token 和使用时长 | `~/.claude/projects/**/*.jsonl` 会话记录：token 取每条回复的 `usage`（按消息 id 去重；同一条回复分几行写入时取最大值）；活跃时长按同一会话中相邻记录间隔 ≤ 5 分钟累计，几个会话同时进行时各自计时再相加 |
 | Codex 额度和用量（Mac 版） | `~/.codex/sessions/**/rollout-*.jsonl`（ChatGPT 桌面版和 Codex CLI 写的本地记录）：额度取最新的 `rate_limits`，token 取累计 `token_count` 的增量 |
 | Grok Bot 额度（Mac 版） | Grok Bot 桌面版的本地缓存 `~/Library/Application Support/Grok Bot/sand-client-persistence/` 里的 `weekly-usage.cache`（每周已用百分比、重置时间、套餐名；Grok Bot 打开时才会更新） |
 | DeepSeek 余额（Mac 版） | DeepSeek Harness 的 `~/.dsh/.dshw-usage.json`（余额、每天花费；不读 API 密钥，不联网） |

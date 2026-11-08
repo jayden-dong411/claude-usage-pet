@@ -6,7 +6,7 @@ const fs = require('fs');
 const path = require('path');
 const { projectsDir } = require('./paths');
 
-const VERSION = 1;
+const VERSION = 3;          // 3: counts the growth of a reply written over several lines
 const CHUNK = 8 << 20;
 const K = (s) => Buffer.from(s, 'utf8');
 const kTs = K('"timestamp":"'), kCwd = K('"cwd":"'), kUsage = K('"usage":{'), kAsst = K('"type":"assistant"');
@@ -140,11 +140,27 @@ class UsageIndexer {
     const ui = line.indexOf(kUsage);
     if (ui < 0 || line.indexOf(kAsst) < 0) return;
     const id = strAfter(line, kId);
-    if (!id || this.cache.seen[id]) return;
+    if (!id) return;
+    const tk = { input: intAfter(line, kIn, ui), output: intAfter(line, kOut, ui), cacheWrite: intAfter(line, kCw, ui), cacheRead: intAfter(line, kCr, ui) };
+    // Claude Code writes a long reply as consecutive lines with the same id; later ones can carry more
+    // output tokens. Add only what grew, to the day the reply was first counted on.
+    const last = st.last;
+    if (last && last.id === id) {
+      const delta = {};
+      for (const f of ['input', 'output', 'cacheWrite', 'cacheRead']) { delta[f] = Math.max(0, tk[f] - last.tk[f]); last.tk[f] = Math.max(tk[f], last.tk[f]); }
+      if (!(delta.input + delta.output + delta.cacheWrite + delta.cacheRead)) return;
+      const d = this.day(last.day);
+      addTokens(d.tokens, delta);
+      addTokens(d.models[last.model] || (d.models[last.model] = emptyTokens()), delta);
+      const p = d.projects[last.project] || (d.projects[last.project] = { tokens: emptyTokens(), activeSeconds: 0, messages: 0 });
+      addTokens(p.tokens, delta);
+      return;
+    }
+    if (this.cache.seen[id]) return;
     this.cache.seen[id] = 1;
     const model = strAfter(line, kModel) || 'unknown';
     if (model === '<synthetic>') return;
-    const tk = { input: intAfter(line, kIn, ui), output: intAfter(line, kOut, ui), cacheWrite: intAfter(line, kCw, ui), cacheRead: intAfter(line, kCr, ui) };
+    st.last = { id, day: k, model, project: st.project, tk: { ...tk } };
     const d = this.day(k);
     d.messages += 1;
     addTokens(d.tokens, tk);

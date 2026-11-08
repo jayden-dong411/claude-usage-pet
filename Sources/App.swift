@@ -83,11 +83,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, NSW
         forceV3 = snapshotMode && CommandLine.arguments.contains("--v3")
         buildPanel()
         model.onChange = { [weak self] in self?.refreshPet() }
-        model.onTaskFinished = { [weak self] s in self?.react(.taskDone, say: "「\(s.name)」完成了哦～") }
+        model.onTaskFinished = { [weak self] s in
+            guard let self else { return }
+            // Only "stopped working" is certain, not "succeeded": say the round is over.
+            if !self.panel.isVisible { self.hub.notify(title: "Claude大小姐", body: "「\(s.name)」这一轮处理结束了") }
+            self.react(.taskDone, say: "「\(s.name)」这一轮处理结束啦～")
+        }
         model.onTaskStarted = { [weak self] s in self?.react(.taskStarted, say: "「\(s.name)」开工！") }
         model.onTaskWaiting = { [weak self] s in
             guard let self, self.settings.alertWaiting else { return }
             self.lastNudge = Date()
+            if !self.panel.isVisible {
+                // Pop up over whatever is in front for a moment, and leave a notification.
+                self.hub.notify(title: "Claude大小姐", body: "「\(s.name)」\(s.waitingLabel)")
+                self.forceShowUntil = Date().addingTimeInterval(8)
+                self.updateVisibility()
+            }
             self.react(.needsYou, seconds: 8, say: "「\(s.name)」\(s.waitingLabel)～")
         }
         model.onUsageLoaded = { [weak self] _ in
@@ -152,6 +163,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, NSW
                                   observedAt: Date().addingTimeInterval(-600)),
                     ]
                     if args.contains("--focus") { self.hub.setDemoFocus(23 * 60 + 12) }
+                    if args.contains("--stale") {        // old reading + failed refresh
+                        self.model.lastUsageUpdate = Date().addingTimeInterval(-25 * 60)
+                        self.model.usageError = "连不上 claude.ai（演示）"
+                    }
                     self.refreshPet()
                     self.setFace("ojou_laugh")
                     self.say("本小姐驾到～ 点我看用量")
@@ -449,7 +464,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, NSW
         var text = "5h —  ·  7d —"
         if let u = model.usage {
             let f = { (w: LimitWindow?) in w.map { "\(Int($0.utilization.rounded()))%" } ?? "—" }
-            text = "5h \(f(u.fiveHour))  ·  7d \(f(u.sevenDay))"
+            text = "5h \(f(u.fiveHour))  ·  7d \(f(u.sevenDay))" + (model.usageStale ? " ⚠︎" : "")
         } else if model.needsLogin {
             text = "点我登录看用量"
         }

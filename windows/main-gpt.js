@@ -73,6 +73,7 @@ function payload() {
     forecast7: history.forecast('live', false, state.usage?.sevenDay),
     spark: history.fiveHourSeries('live', state.usage?.fiveHour),
     petTask: taskText(), petPill: pillText(), alert: state.sessions.some((s) => s.isWaiting),
+    usageStale: usageStale(),
     v3: true, hasV3: false, hasStickers: false, v3dir: V3DIR, ownSource: 'codex', dashSource: args.includes('--dash-all') ? 'all' : null,
     petName: NAME, hostName: 'ChatGPT', canAddAccount: false, sessionNoun: '线程',
     emptyTasks: '现在没有进行中的 Codex 线程，龙娘在晒太阳～',
@@ -101,13 +102,15 @@ function broadcast() {
 
 const clip = (s, n) => (s.length > n ? s.slice(0, n - 1) + '…' : s);
 const mmss = (ms) => { const s = Math.max(0, Math.ceil(ms / 1000)); return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`; };
+/** The reading on screen is over 10 minutes old (live query failing and the logs are old). */
+const usageStale = () => !!state.usage && (!state.lastUsageUpdate || Date.now() - state.lastUsageUpdate > 600e3);
 function pillText() {
   if (state.focusEnd > Date.now()) return `🍅 专注 ${mmss(state.focusEnd - Date.now())}`;
   if (state.restEnd > Date.now()) return `☕ 休息 ${mmss(state.restEnd - Date.now())}`;
   const u = state.usage;
   if (!u) return '5h —  ·  周 —';
   const f = (w) => (w ? `${Math.round(w.utilization)}%` : '—');
-  return `5h ${f(u.fiveHour)}  ·  周 ${f(u.sevenDay)}`;
+  return `5h ${f(u.fiveHour)}  ·  周 ${f(u.sevenDay)}` + (usageStale() ? ' ⚠︎' : '');
 }
 function fmtDuration(ms) {
   const s = Math.max(0, Math.floor(ms / 1000)), d = Math.floor(s / 86400), h = Math.floor((s % 86400) / 3600), m = Math.floor((s % 3600) / 60);
@@ -219,13 +222,14 @@ function refreshSessions(notifyChanges) {
     for (const s of list) {
       const prev = prevStatus.get(s.id);
       if ((prev === 'busy' || prev === 'waiting') && s.status === 'idle') {
-        react('taskDone', 5, `「${s.name}」完成了哦～`);
-        notify(NAME, `「${s.name}」完成了`);
+        react('taskDone', 5, `「${s.name}」这一轮处理结束啦～`);
+        notify(NAME, `「${s.name}」这一轮处理结束了`);
       }
       if (s.isWaiting && prev !== 'waiting' && settings.alertWaiting) {
         lastNudge = Date.now();
+        notify(NAME, `「${s.name}」${s.waitingLabel}`);          // only while she is hidden
+        if (!petVisible()) { forceShowUntil = Date.now() + 8e3; updateVisibility(); }   // pop up for a moment
         react('needsYou', 8, `「${s.name}」${s.waitingLabel}～`);
-        notify(NAME, `「${s.name}」${s.waitingLabel}`);
       }
     }
     const started = list.find((s) => s.isBusy && !['busy', 'waiting'].includes(prevStatus.get(s.id)));
@@ -253,7 +257,7 @@ async function refreshUsage() {
     state.usage = { fiveHour: win('5 小时'), sevenDay: win('每周'), extras: [], plan: c.plan, account: 'ChatGPT 账号',
       source: live ? 'ChatGPT 账号实时额度' : '本机 Codex 日志（实时查询失败）' };
     state.usageError = live ? null : `实时查询失败：${state.codexError || '未知原因'}；先显示本机日志里的数字`;
-    state.lastUsageUpdate = Date.now();
+    state.lastUsageUpdate = c.observedAt || Date.now();     // a log reading keeps its own (older) time
     if (live) { history.record({ ...state.usage, account: 'live' }); writePeer(live); }
   } finally { state.loadingUsage = false; broadcast(); }
 }

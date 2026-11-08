@@ -49,12 +49,13 @@
   const act = (n, ...a) => window.pet.act(n, ...a);
   U.wireHeatmap(root, 'panel-heat');
 
-  function limit(title, w, now, fc) {
+  function limit(title, w, now, fc, stale) {
     const u = w ? w.utilization : 0;
-    const f = U.forecastText(fc);
+    const f = stale ? null : U.forecastText(fc);          // no forecast from an old reading
+    const col = stale ? 'var(--text-3)' : U.barColor(u);   // old readings are greyed out
     return `<div class="limit">
-      <div class="top"><span>${title}</span><span class="mono" style="color:${w ? U.barColor(u) : 'var(--text-3)'}">${w ? Math.round(u) + '%' : '—'}</span></div>
-      <div class="bar"><i style="width:${Math.min(100, u)}%;background:${U.barColor(u)}"></i></div>
+      <div class="top"><span>${title}</span><span class="mono" style="color:${w ? col : 'var(--text-3)'}">${w ? Math.round(u) + '%' : '—'}</span></div>
+      <div class="bar"><i style="width:${Math.min(100, u)}%;background:${col}"></i></div>
       <div class="sub">${w ? U.resetText(w, now) : '暂无数据'}</div>
       ${f ? `<div class="fc ${fc.kind === 'runsOut' ? 'warn' : ''}">${fc.kind === 'runsOut' ? '⚠︎ ' : '↗ '}${f}</div>` : ''}
     </div>`;
@@ -101,11 +102,11 @@
         <div class="meta">${U.esc(who || '大小姐现在：' + s.levelName)}</div></div>
         <button class="link" style="font-size:16px" data-act="refresh" title="刷新用量">${s.loadingUsage ? '…' : '⟳'}</button></div>
       ${s.hasV3 ? `<div class="switch"><button class="${s.v3 ? '' : 'on'}" data-act="figStickers">☺ 表情头像</button><button class="${s.v3 ? 'on' : ''}" data-act="figV3">♟ v3 小人</button></div>` : ''}
-      ${limit('5 小时限额', u?.fiveHour, now, s.forecast5)}
+      ${limit('5 小时限额', u?.fiveHour, now, s.forecast5, s.usageStale)}
       ${spark(s.spark)}
-      ${limit('每周限额（7 天）', u?.sevenDay, now, s.forecast7)}
+      ${limit('每周限额（7 天）', u?.sevenDay, now, s.forecast7, s.usageStale)}
       ${(u?.extras || []).map((e) => `<div class="limit"><div class="top" style="font-weight:400;font-size:12px"><span>${e.label}</span><span class="mono">${Math.round(e.window.utilization)}%</span></div><div class="bar thin"><i style="width:${e.window.utilization}%;background:${U.barColor(e.window.utilization)}"></i></div></div>`).join('')}
-      ${s.usageError && (!u || s.needsLogin) ? `<div class="box"><div class="meta" style="white-space:normal">${U.esc(s.usageError)}</div>
+      ${s.usageError || s.usageStale ? `<div class="box">${u ? `<div style="font-size:12px;font-weight:600;color:var(--alert)">⚠︎ 上面是 ${s.lastUsageUpdate ? U.ago(s.lastUsageUpdate, now) : '之前'} 的数据${s.usageError ? '，刷新失败了：' : '，正在重新获取…'}</div>` : ''}${s.usageError ? `<div class="meta" style="white-space:normal">${U.esc(s.usageError)}</div>` : ''}
         ${s.needsLogin ? `<button class="btn primary" style="margin-top:6px" data-act="login">登录 claude.ai 查看用量</button>` : ''}</div>` : ''}
       ${!s.settings.hasSecondary && s.canAddAccount !== false ? `<button class="link" data-act="loginSecond" style="align-self:flex-start">＋ 添加另一个账号</button>` : ''}`;
     // "其他额度": second account + other tools, folded into one summary row.

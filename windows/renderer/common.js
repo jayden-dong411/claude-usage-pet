@@ -14,6 +14,11 @@ const U = {
     return d ? `${d}天${h}小时` : h ? `${h}小时${m}分` : m ? `${m}分钟` : '不到1分钟';
   },
   pad: (n) => String(n).padStart(2, '0'),
+  /** "刚刚" / "12 分钟前" / "3 小时前" / "2 天前". */
+  ago(t, now = Date.now()) {
+    const s = Math.max(0, (now - t) / 1000);
+    return s < 60 ? '刚刚' : s < 3600 ? `${Math.floor(s / 60)} 分钟前` : s < 86400 ? `${Math.floor(s / 3600)} 小时前` : `${Math.floor(s / 86400)} 天前`;
+  },
   clock(t) { const d = new Date(t); return `${U.pad(d.getHours())}:${U.pad(d.getMinutes())}:${U.pad(d.getSeconds())}`; },
   when(t) {
     const d = new Date(t), now = new Date();

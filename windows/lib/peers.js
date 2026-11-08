@@ -29,7 +29,7 @@ async function codexLive(fetchFn, maxAgeMs = 60e3) {
     if (!r.ok) throw new Error(`查询失败（HTTP ${r.status}）`);
     const j = await r.json();
     const win = (w) => {
-      if (!w) return { utilization: 0, resetsAt: null };
+      if (!w) return null;                       // the account reported no such window: show —, not 0%
       const used = Number(w.used_percent) || 0;
       if (used === 0 && w.limit_window_seconds && w.reset_after_seconds >= w.limit_window_seconds - 60) return { utilization: 0, resetsAt: null };
       return { utilization: Math.max(0, used), resetsAt: w.reset_at ? w.reset_at * 1000 : null };
@@ -38,7 +38,7 @@ async function codexLive(fetchFn, maxAgeMs = 60e3) {
     const plan = j.plan_type ? j.plan_type[0].toUpperCase() + j.plan_type.slice(1) : null;
     codexCache = { at: Date.now(), error: null,
       value: { provider: 'codex', title: 'ChatGPT · Codex', plan, observedAt: Date.now(),
-        windows: [{ label: '5 小时', ...win(rl.primary_window) }, { label: '每周', ...win(rl.secondary_window) }] } };
+        windows: [['5 小时', win(rl.primary_window)], ['每周', win(rl.secondary_window)]].filter(([, w]) => w).map(([label, w]) => ({ label, ...w })) } };
   } catch (e) {
     codexCache = { at: Date.now(), value: null, error: e.message };
   }

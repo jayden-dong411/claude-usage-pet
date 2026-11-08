@@ -77,6 +77,7 @@ function payload() {
     forecast7: history.forecast(acct, false, state.usage?.sevenDay),
     spark: history.fiveHourSeries(acct, state.usage?.fiveHour),
     petTask: taskText(), petPill: pillText(), alert: state.sessions.some((s) => s.isWaiting),
+    usageStale: usageStale(),
     v3: settings.figure === 'v3' && hasV3(), hasV3: hasV3(), ownSource: 'claude', dashSource: args.includes('--dash-all') ? 'all' : null,
     focusing: state.focusEnd > Date.now(), resting: state.restEnd > Date.now(),
     now: Date.now(),
@@ -93,20 +94,23 @@ function broadcast() {
     for (const w of [pet, panel, dashboard, settingsWin]) if (w && !w.isDestroyed()) w.webContents.send('state', p);
     if (tray) {
       const f = state.usage?.fiveHour;
-      tray.setToolTip(`Claude大小姐 · 5h ${f ? Math.round(f.utilization) + '%' : '—'}` + (p.focusing || p.resting ? ` · ${p.petPill}` : ''));
+      tray.setToolTip(`Claude大小姐 · 5h ${f ? Math.round(f.utilization) + '%' : '—'}${usageStale() ? `（${U_ago(state.lastUsageUpdate)}的数据）` : ''}` + (p.focusing || p.resting ? ` · ${p.petPill}` : ''));
     }
   });
 }
 
+const U_ago = (t) => { if (!t) return '之前'; const s = (Date.now() - t) / 1000; return s < 3600 ? `${Math.max(1, Math.floor(s / 60))} 分钟前` : `${Math.floor(s / 3600)} 小时前`; };
 const clip = (s, n) => (s.length > n ? s.slice(0, n - 1) + '…' : s);
 const mmss = (ms) => { const s = Math.max(0, Math.ceil(ms / 1000)); return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`; };
+/** Showing an old reading: the last refresh failed, or it is over 10 minutes old. */
+const usageStale = () => !!state.usage && (!!state.usageError || !state.lastUsageUpdate || Date.now() - state.lastUsageUpdate > 600e3);
 function pillText() {
   if (state.focusEnd > Date.now()) return `🍅 专注 ${mmss(state.focusEnd - Date.now())}`;
   if (state.restEnd > Date.now()) return `☕ 休息 ${mmss(state.restEnd - Date.now())}`;
   const u = state.usage;
   if (!u) return state.needsLogin ? '点我登录看用量' : '5h —  ·  7d —';
   const f = (w) => (w ? `${Math.round(w.utilization)}%` : '—');
-  return `5h ${f(u.fiveHour)}  ·  7d ${f(u.sevenDay)}`;
+  return `5h ${f(u.fiveHour)}  ·  7d ${f(u.sevenDay)}` + (usageStale() ? ' ⚠︎' : '');
 }
 function taskText() {
   const waiting = state.sessions.filter((s) => s.isWaiting), busy = state.sessions.filter((s) => s.isBusy);
@@ -250,13 +254,14 @@ function refreshSessions(notifyChanges) {
     for (const s of list) {
       const prev = prevStatus.get(s.id);
       if (prev === 'busy' && (s.status === 'idle' || s.status === 'shell')) {
-        react('taskDone', 5, `「${s.name}」完成了哦～`);
-        notify('Claude大小姐', `「${s.name}」完成了`);
+        react('taskDone', 5, `「${s.name}」这一轮处理结束啦～`);
+        notify('Claude大小姐', `「${s.name}」这一轮处理结束了`);
       }
       if (s.isWaiting && prev !== 'waiting' && settings.alertWaiting) {
         lastNudge = Date.now();
+        notify('Claude大小姐', `「${s.name}」${s.waitingLabel}`);          // only while she is hidden
+        if (!petVisible()) { forceShowUntil = Date.now() + 8e3; updateVisibility(); }   // pop up for a moment
         react('needsYou', 8, `「${s.name}」${s.waitingLabel}～`);
-        notify('Claude大小姐', `「${s.name}」${s.waitingLabel}`);
       }
     }
     const started = list.find((s) => s.isBusy && prevStatus.get(s.id) !== 'busy' && prevStatus.get(s.id) !== 'waiting');
@@ -657,6 +662,7 @@ function demoData() {
   if (args.includes('--v3')) settings.figure = 'v3';
   if (args.includes('--focus')) state.focusEnd = now + (23 * 60 + 12) * 1000;
   state.lastUsageUpdate = now; state.lastIndexed = now;
+  if (args.includes('--stale')) { state.lastUsageUpdate = now - 25 * 60e3; state.usageError = '连不上 claude.ai（演示）'; }
   history.loadDemo('demo@example.com', 63);
   let seed = 42;
   const rnd = () => { seed = (seed * 1103515245 + 12345) % 2147483648; return seed / 2147483648; };

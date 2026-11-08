@@ -103,7 +103,7 @@ struct DashboardView: View {
                     breakdown("按项目", tint: VizColor.tokens,
                               rows: dm.total(range).projects.map { ($0.key, $0.value.tokens.total, $0.value.activeSeconds) })
                 }
-                Text("数据来自这台 Mac 上 ~/.codex/sessions 里的 Codex 日志（ChatGPT 桌面版和 Codex CLI 都算），不含其他设备和网页版聊天。输入指未命中缓存的输入；使用时长按同一线程里相邻两条记录间隔不超过 5 分钟累计。")
+                Text("数据来自这台 Mac 上 ~/.codex/sessions 里的 Codex 日志（ChatGPT 桌面版和 Codex CLI 都算），不含其他设备和网页版聊天。输入指未命中缓存的输入；活跃时长按同一线程里相邻两条记录间隔不超过 5 分钟累计；几个线程同时在跑时各自计时再相加，所以可能比实际经过的时间长。")
                     .font(.caption2).foregroundStyle(.tertiary)
             }
             .padding(20)
@@ -145,7 +145,7 @@ struct DashboardView: View {
         return VStack(alignment: .leading, spacing: 8) {
             Text("今天").font(.headline)
             HStack(spacing: 10) {
-                StatTile(icon: "clock.fill", tint: VizColor.time, title: "使用时长",
+                StatTile(icon: "clock.fill", tint: VizColor.time, title: "线程活跃时长",
                          value: Num.hours(t.activeSeconds), sub: "\(t.sessions.count) 个线程")
                 StatTile(icon: "flame.fill", tint: VizColor.tokens, title: "总 Token",
                          value: Num.cn(t.tokens.total), sub: "\(t.messages) 次回复")
@@ -208,7 +208,7 @@ struct DashboardView: View {
     private var timeChart: some View {
         Card {
             VStack(alignment: .leading, spacing: 10) {
-                Text("每天使用时长").font(.subheadline.weight(.semibold))
+                Text("每天线程活跃时长").font(.subheadline.weight(.semibold))
                 Chart {
                     ForEach(series, id: \.date) { d in
                         BarMark(x: .value("日期", d.date, unit: .day),

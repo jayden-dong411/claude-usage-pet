@@ -21,6 +21,10 @@ struct UsageBar: View {
     let now: Date
     var compact = false
     var forecast: Forecast? = nil
+    /// An old reading (refresh failed or hasn't run): greyed out so it isn't mistaken for the current state.
+    var stale = false
+
+    private func tint(_ u: Double) -> Color { stale ? Color.secondary.opacity(0.55) : barColor(u) }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
@@ -29,13 +33,13 @@ struct UsageBar: View {
                 Spacer()
                 Text(window.map { "\(Int($0.utilization.rounded()))%" } ?? "—")
                     .font((compact ? Font.caption : .subheadline).monospacedDigit().weight(.semibold))
-                    .foregroundStyle(window.map { barColor($0.utilization) } ?? .secondary)
+                    .foregroundStyle(window.map { tint($0.utilization) } ?? .secondary)
             }
             ZStack(alignment: .leading) {
                 Capsule().fill(Color.secondary.opacity(0.15))
                 GeometryReader { g in
                     Capsule()
-                        .fill(barColor(window?.utilization ?? 0))
+                        .fill(tint(window?.utilization ?? 0))
                         .frame(width: g.size.width * CGFloat(min(window?.utilization ?? 0, 100)) / 100)
                 }
             }
@@ -262,23 +266,34 @@ struct PanelView: View {
 
     @ViewBuilder private var usageSection: some View {
         let acct = model.usage?.account
+        let stale = model.usageStale
         VStack(alignment: .leading, spacing: 12) {
             VStack(alignment: .leading, spacing: 4) {
                 UsageBar(title: "5 小时限额", window: model.usage?.fiveHour, now: model.now,
-                         forecast: model.history.forecast(account: acct, fiveHour: true, window: model.usage?.fiveHour))
+                         forecast: stale ? nil : model.history.forecast(account: acct, fiveHour: true, window: model.usage?.fiveHour),
+                         stale: stale)
                 let pts = model.history.fiveHourSeries(account: acct, window: model.usage?.fiveHour)
                 if pts.count >= 3 { Sparkline(points: pts) }
             }
             UsageBar(title: "每周限额（7 天）", window: model.usage?.sevenDay, now: model.now,
-                     forecast: model.history.forecast(account: acct, fiveHour: false, window: model.usage?.sevenDay))
+                     forecast: stale ? nil : model.history.forecast(account: acct, fiveHour: false, window: model.usage?.sevenDay),
+                     stale: stale)
             if let extras = model.usage?.extras, !extras.isEmpty {
                 ForEach(Array(extras.enumerated()), id: \.offset) { _, e in
-                    UsageBar(title: e.label, window: e.window, now: model.now, compact: true)
+                    UsageBar(title: e.label, window: e.window, now: model.now, compact: true, stale: stale)
                 }
             }
-            if let err = model.usageError, model.usage == nil || model.needsLogin {
+            if model.usageError != nil || stale {
                 VStack(alignment: .leading, spacing: 6) {
-                    Text(err).font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+                    if model.usage != nil {
+                        Label("上面是 \(model.lastUsageUpdate.map { petAgo($0, now: model.now) } ?? "之前") 的数据"
+                              + (model.usageError == nil ? "，正在重新获取…" : "，刷新失败了："),
+                              systemImage: "exclamationmark.triangle.fill")
+                            .font(.caption.weight(.semibold)).foregroundStyle(accentDeep)
+                    }
+                    if let err = model.usageError {
+                        Text(err).font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+                    }
                     if model.needsLogin {
                         Button("登录 claude.ai 查看用量", action: openLogin)
                             .buttonStyle(.borderedProminent).tint(accent).controlSize(.small)

@@ -41,15 +41,26 @@ struct DayStats: Codable {
     }
 }
 
+/// The last reply counted in a file. Claude Code writes a long reply as several consecutive lines with the
+/// same message id, and the later lines can carry a larger `output_tokens`, so we add what grew.
+private struct LastReply: Codable {
+    var id: String
+    var day: String
+    var model: String
+    var project: String
+    var tokens: TokenCounts
+}
+
 private struct FileState: Codable {
     var offset: UInt64 = 0
     var lastTs: Double = 0
     var project = ""
     var projectFromCwd = false
+    var last: LastReply? = nil
 }
 
 private struct IndexCache: Codable {
-    var version = 1
+    var version = 2                 // 2: counts the growth of a reply written over several lines
     var files: [String: FileState] = [:]
     var days: [String: DayStats] = [:]
     var seen: Set<String> = []
@@ -228,13 +239,30 @@ final class UsageIndexer: @unchecked Sendable {
 
         guard let ui = find(p, len, Self.kUsage), find(p, len, Self.kAssistant) != nil,
               let id = string(p, len, after: Self.kMsgId) else { return }
-        guard cache.seen.insert(id).inserted else { return }
-        let model = string(p, len, after: Self.kModel) ?? "unknown"
-        if model == "<synthetic>" { return }
         let tk = TokenCounts(input: int(p, len, after: Self.kInput, from: ui),
                              output: int(p, len, after: Self.kOutput, from: ui),
                              cacheWrite: int(p, len, after: Self.kCacheWrite, from: ui),
                              cacheRead: int(p, len, after: Self.kCacheRead, from: ui))
+        if let last = st.last, last.id == id {
+            // The same reply again, further along: add only what grew, to the day it was first counted on.
+            let delta = TokenCounts(input: max(0, tk.input - last.tokens.input), output: max(0, tk.output - last.tokens.output),
+                                    cacheWrite: max(0, tk.cacheWrite - last.tokens.cacheWrite),
+                                    cacheRead: max(0, tk.cacheRead - last.tokens.cacheRead))
+            guard delta.input + delta.output + delta.cacheWrite + delta.cacheRead > 0 else { return }
+            var ds = cache.days[last.day, default: DayStats()]
+            ds.tokens.add(delta)
+            ds.models[last.model, default: TokenCounts()].add(delta)
+            ds.projects[last.project, default: ProjectStat()].tokens.add(delta)
+            cache.days[last.day] = ds
+            st.last?.tokens = TokenCounts(input: max(tk.input, last.tokens.input), output: max(tk.output, last.tokens.output),
+                                          cacheWrite: max(tk.cacheWrite, last.tokens.cacheWrite),
+                                          cacheRead: max(tk.cacheRead, last.tokens.cacheRead))
+            return
+        }
+        guard cache.seen.insert(id).inserted else { return }
+        let model = string(p, len, after: Self.kModel) ?? "unknown"
+        if model == "<synthetic>" { return }
+        st.last = LastReply(id: id, day: day, model: model, project: st.project, tokens: tk)
         var ds = cache.days[day, default: DayStats()]
         ds.messages += 1
         ds.tokens.add(tk)

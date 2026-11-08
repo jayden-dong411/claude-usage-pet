@@ -84,9 +84,9 @@ enum PeerStore {
 /// CLI's own login (~/.codex/auth.json, read-only; Codex refreshes the token itself when it runs).
 enum CodexLive {
     struct Limits {
-        var fiveHour: Double
+        var fiveHour: Double?          // nil: the account reported no such window (shown as "—", not 0%)
         var fiveReset: Date?
-        var week: Double
+        var week: Double?
         var weekReset: Date?
         var plan: String?
         var at: Date
@@ -136,8 +136,8 @@ enum CodexLive {
             return fail(status == 401 || status == 403 ? "Codex 登录已过期，打开一次 ChatGPT 里的 Codex 就会自动续上"
                         : status == 0 ? "连不上 chatgpt.com" : "查询失败（HTTP \(status)）")
         }
-        func win(_ any: Any?) -> (Double, Date?) {
-            guard let w = any as? [String: Any] else { return (0, nil) }
+        func win(_ any: Any?) -> (Double?, Date?) {
+            guard let w = any as? [String: Any] else { return (nil, nil) }
             let used = (w["used_percent"] as? NSNumber)?.doubleValue ?? 0
             let reset = (w["reset_at"] as? NSNumber).map { Date(timeIntervalSince1970: $0.doubleValue) }
             let after = (w["reset_after_seconds"] as? NSNumber)?.doubleValue ?? 0
@@ -155,8 +155,8 @@ enum CodexLive {
     static func peer() -> PeerUsage? {
         guard let l = fetch() else { return nil }
         return PeerUsage(provider: "codex", title: "ChatGPT · Codex", plan: l.plan,
-                         windows: [PeerWindow(label: "5 小时", utilization: l.fiveHour, resetsAt: l.fiveReset),
-                                   PeerWindow(label: "每周", utilization: l.week, resetsAt: l.weekReset)],
+                         windows: [l.fiveHour.map { PeerWindow(label: "5 小时", utilization: $0, resetsAt: l.fiveReset) },
+                                   l.week.map { PeerWindow(label: "每周", utilization: $0, resetsAt: l.weekReset) }].compactMap { $0 },
                          observedAt: l.at)
     }
 }

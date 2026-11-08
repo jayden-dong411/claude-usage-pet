@@ -21,6 +21,10 @@ struct UsageBar: View {
     let now: Date
     var compact = false
     var forecast: Forecast? = nil
+    /// An old reading (refresh failed or hasn't run): greyed out so it isn't mistaken for the current state.
+    var stale = false
+
+    private func tint(_ u: Double) -> Color { stale ? Color.secondary.opacity(0.55) : barColor(u) }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
@@ -29,13 +33,13 @@ struct UsageBar: View {
                 Spacer()
                 Text(window.map { "\(Int($0.utilization.rounded()))%" } ?? "—")
                     .font((compact ? Font.caption : .subheadline).monospacedDigit().weight(.semibold))
-                    .foregroundStyle(window.map { barColor($0.utilization) } ?? .secondary)
+                    .foregroundStyle(window.map { tint($0.utilization) } ?? .secondary)
             }
             ZStack(alignment: .leading) {
                 Capsule().fill(Color.secondary.opacity(0.15))
                 GeometryReader { g in
                     Capsule()
-                        .fill(barColor(window?.utilization ?? 0))
+                        .fill(tint(window?.utilization ?? 0))
                         .frame(width: g.size.width * CGFloat(min(window?.utilization ?? 0, 100)) / 100)
                 }
             }
@@ -210,12 +214,14 @@ struct PanelView: View {
         VStack(alignment: .leading, spacing: 12) {
             VStack(alignment: .leading, spacing: 4) {
                 UsageBar(title: "5 小时额度", window: model.usage?.fiveHour, now: model.now,
-                         forecast: model.history.forecast(account: model.usage?.account, fiveHour: true, window: model.usage?.fiveHour))
+                         forecast: model.usageStale ? nil : model.history.forecast(account: model.usage?.account, fiveHour: true, window: model.usage?.fiveHour),
+                         stale: model.usageStale)
                 let pts = model.history.fiveHourSeries(account: model.usage?.account, window: model.usage?.fiveHour)
                 if pts.count >= 3 { Sparkline(points: pts) }
             }
             UsageBar(title: "每周额度", window: model.usage?.sevenDay, now: model.now,
-                     forecast: model.history.forecast(account: model.usage?.account, fiveHour: false, window: model.usage?.sevenDay))
+                     forecast: model.usageStale ? nil : model.history.forecast(account: model.usage?.account, fiveHour: false, window: model.usage?.sevenDay),
+                     stale: model.usageStale)
             if let u = model.usage {
                 Group {
                 if u.source == "ChatGPT 账号" {
@@ -226,6 +232,11 @@ struct PanelView: View {
                 }
                 }
                 .font(.caption2).foregroundStyle(.tertiary).fixedSize(horizontal: false, vertical: true)
+                if model.usageStale {
+                    Label("上面是 \(petAgo(u.observedAt, now: model.now)) 的数据，不一定是现在的额度"
+                          + (model.liveError.map { "；实时查询失败：\($0)" } ?? ""), systemImage: "exclamationmark.triangle.fill")
+                        .font(.caption.weight(.semibold)).foregroundStyle(accentDeep).fixedSize(horizontal: false, vertical: true)
+                }
             } else if let err = model.usageError {
                 Text(err).font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
                     .padding(10)

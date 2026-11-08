@@ -157,7 +157,7 @@
         <div style="margin-top:10px">${U.heatmap(days, { weeks: 38, cell: 13, gap: 4, hoverId: 'dash-heat' })}</div></div>
       <h2>今天</h2>
       <div class="tiles">
-        ${tile('◷', 'var(--time)', '使用时长', U.hours(today.activeSeconds), `${today.sessions.length} 个会话`)}
+        ${tile('◷', 'var(--time)', '会话活跃时长', U.hours(today.activeSeconds), `${today.sessions.length} 个会话`)}
         ${tile('🔥', 'var(--tokens)', '总 Token', U.cn(U.total(today.tokens)), `${today.messages} 次回复`)}
         ${tile('✎', 'var(--tokens)', '输入 + 输出', U.cn(today.tokens.input + today.tokens.output), `输出 ${U.cn(today.tokens.output)}`)}
         ${tile('▤', 'var(--tokens)', '缓存', U.cn(today.tokens.cacheRead + today.tokens.cacheWrite), `读 ${U.cn(today.tokens.cacheRead)} · 写 ${U.cn(today.tokens.cacheWrite)}`)}
@@ -165,9 +165,9 @@
       <div class="row"><h2>趋势</h2><span class="spacer"></span>${seg('range', [[7, '7 天'], [14, '14 天'], [30, '30 天']], range)}</div>
       <div class="card"><div class="row"><h3>每天 Token</h3><span class="spacer"></span>${seg('metric', Object.entries(METRICS).map(([k, v]) => [k, v[0]]), metric)}</div>
         <div class="chart" id="tok" style="margin-top:10px"></div></div>
-      <div class="card"><h3>每天使用时长</h3><div class="chart" id="time" style="margin-top:10px"></div></div>
+      <div class="card"><h3>每天会话活跃时长</h3><div class="chart" id="time" style="margin-top:10px"></div></div>
       <div class="two">${rank('按模型', Object.entries(tot.models))}${rank('按项目', Object.entries(tot.projects).map(([k, v]) => [k, v.tokens, v.secs]))}</div>
-      <div class="faint" style="font-size:11px">${source === 'all' ? NOTES.claude + NOTES.codex : NOTES[source]}使用时长按同一会话里相邻两条记录间隔不超过 5 分钟累计。</div>`;
+      <div class="faint" style="font-size:11px">${source === 'all' ? NOTES.claude + NOTES.codex : NOTES[source]}活跃时长按同一会话里相邻两条记录间隔不超过 5 分钟累计；几个会话同时在跑时各自计时再相加，所以可能比实际经过的时间长。</div>`;
     document.title = `${SOURCES[source]} 用量统计`;
     const [label, fn] = METRICS[metric];
     barChart('tok', series, (d) => (d.stats ? fn(d.stats.tokens) : 0), 'var(--tokens)', (v) => U.cn(v),
