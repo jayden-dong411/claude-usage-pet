@@ -17,12 +17,15 @@
 
 到 [**Releases**](../../releases/latest) 下载最新版：
 
-| 系统 | 文件 | 状态 |
-|---|---|---|
-| macOS 14 及以上（Intel 和 Apple 芯片通用） | `ClaudeUsagePet-…-macOS.zip` | ✅ 可用 |
-| Windows 10 / 11（64 位） | `ClaudeUsagePet-Setup-…-win-x64.exe`（安装版）<br>`ClaudeUsagePet-…-win-x64-portable.zip`（免安装） | 🧪 测试版 |
+| 桌宠 | 系统 | 文件 | 状态 |
+|---|---|---|---|
+| **Claude大小姐**（Claude） | macOS 14 及以上（Intel 和 Apple 芯片通用） | `ClaudeUsagePet-…-macOS.zip` | ✅ 可用 |
+| **Claude大小姐**（Claude） | Windows 10 / 11（64 位） | `ClaudeUsagePet-Setup-…-win-x64.exe`（安装版）<br>`ClaudeUsagePet-…-win-x64-portable.zip`（免安装） | 🧪 测试版 |
+| **GPT龙娘**（ChatGPT · Codex） | macOS 14 及以上 | `GPTDragonPet-…-macOS.zip` | ✅ 可用 |
+| **Grok娘**（Grok Bot） | macOS 14 及以上 | `GrokPet-…-macOS.zip` | ✅ 可用 |
+| **DeepSeek娘**（DeepSeek Harness） | macOS 14 及以上 | `DeepSeekPet-…-macOS.zip` | ✅ 可用 |
 
-> Windows 版是用 Electron 重写的，功能和 Mac 版一致，但作者还没在 Windows 真机上完整测试过，遇到问题欢迎提 [Issue](../../issues)。
+> Windows 版是用 Electron 重写的 Claude大小姐，作者还没在 Windows 真机上完整测试过，遇到问题欢迎提 [Issue](../../issues)。另外三只桌宠目前只有 Mac 版，见下方「另外三只桌宠」。
 
 ## 安装（Windows）
 
@@ -31,7 +34,7 @@
 3. 大小姐会出现在屏幕右下角，任务栏右下角的托盘里也有她的图标（右键托盘图标可以打开面板、设置或退出）。
 4. 用量会依次尝试：读取 Claude 桌面版的登录 → 读取 Claude Code 的登录（`%USERPROFILE%\.claude\.credentials.json`）→ 都不行时，在面板里点 **「登录 claude.ai 查看用量」** 单独登录一次（之后会记住）。
 
-> Windows 版另外支持：**系统通知**——大小姐隐藏时（Claude 不在前台），任务完成或需要你批准会弹出 Windows 通知。
+> Windows 版也有：v3 小人、「其他额度」折叠区（Codex 实时额度、Grok Bot、DeepSeek 余额）、托盘悬停显示 5 小时额度、专注番茄钟、久坐 / 熬夜提醒、双击跳一下和摸头。另外支持 **系统通知**——大小姐隐藏时（Claude 不在前台），任务完成、需要你批准或到点提醒都会弹出 Windows 通知。暂不支持：可动小人、用量统计里的 Codex / 合计切换。
 
 <p align="center"><img src="docs/screenshots/windows-panel.png" width="300" alt="Windows 版面板（演示数据）"></p>
 
@@ -176,9 +179,22 @@
 
 只统计这台电脑上的 Claude Code（桌面版和终端都算）和 Codex，不包括其他设备、网页版聊天。
 
-### 和其他桌宠一起用
+### 另外三只桌宠（macOS）
 
-作者本机还用同一套代码给 ChatGPT、Grok Bot、DeepSeek Harness 各做了一只桌宠（因为素材授权原因不在这个仓库里）。共用的部分在 `Sources/PetHub.swift`（菜单栏、番茄钟、提醒的协调）、`Sources/Peers.swift`（各家额度）、`Sources/V3Figure.swift`、`Sources/PetChrome.swift`：同时运行时，按「Claude大小姐 → GPT龙娘 → Grok娘 → DeepSeek娘」的顺序由第一只在运行的桌宠显示菜单栏图标并负责计时；提醒由当前前台应用对应的那只桌宠弹出。只装大小姐时这些都不影响使用。
+同一套代码还做了三只桌宠，源码在 `companions/`，安装包在 Releases：
+
+| 桌宠 | 出现在 | 额度 / 数据 | 形象 |
+|---|---|---|---|
+| **GPT龙娘** | ChatGPT 桌面版（Codex） | 用本机 Codex 的登录（`~/.codex/auth.json`，只读）向 ChatGPT 账号查实时的 5 小时 / 每周额度；Codex 线程、每日 token 统计 | GPT娘（白龙娘）的 8 种表情；可选 GPT龙娘动画（`companions/ChatGPTPet/fetch-dragon.sh` 下载到本机，素材无开放授权，不随安装包分发） |
+| **Grok娘** | Grok Bot 桌面版 | Grok Bot 缓存在本机的每周额度；最近活跃的机器人 | Grok娘的 8 种表情 |
+| **DeepSeek娘** | DeepSeek Harness | 账户余额、今天 / 近 7 天花费、还能用几天；会话列表；用量统计窗口（每日花费、token、余额变化、按模型） | DeepSeek娘 Q版冬装 2 的 8 种表情 |
+
+共用的部分：`companions/Companion/`（三只共用的主程序）、`Sources/PetHub.swift`（菜单栏、番茄钟、提醒的协调）、`Sources/Peers.swift`（各家额度）、`Sources/V3Figure.swift`、`Sources/PetChrome.swift`。几只同时运行时，按「Claude大小姐 → GPT龙娘 → Grok娘 → DeepSeek娘」的顺序由第一只在运行的桌宠显示菜单栏图标并负责计时；提醒由当前前台应用对应的那只桌宠弹出。每只都可以单独使用。
+
+```bash
+companions/ChatGPTPet/build.sh      # 或 GrokPet / DeepSeekPet
+companions/package.sh               # 三只的安装包 → dist/
+```
 
 ---
 
@@ -217,7 +233,8 @@ npm run dist:win                # 生成 ../dist/windows/ 下的安装版 exe �
 | `lib/usage.js` | 用量接口；Windows 上用 DPAPI + AES-GCM 读取 Claude 桌面版的登录 |
 | `lib/foreground.js` | 用常驻 PowerShell 检测前台程序和是否全屏 |
 | `lib/sessions.js` / `lib/indexer.js` / `lib/history.js` | 会话与步骤进度、每日统计、用量预测（和 Mac 版同一套规则） |
-| `lib/expressions.js` | 表情分组（由 `Sources/Expressions.swift` 生成） |
+| `lib/expressions.js` | 表情分组（由 `gen-expressions.py` 从 `Sources/Expressions.swift` 生成） |
+| `lib/peers.js` | 「其他额度」：Codex 实时额度、Grok Bot、DeepSeek 余额 |
 | `renderer/` | 桌宠、面板、用量统计、设置四个界面 |
 
 ### 目录结构
@@ -275,6 +292,7 @@ Assets/v3/                  v3 小人的 8 张表情（CC BY-NC-SA 4.0）
 ## 署名与许可
 
 - **代码**：[MIT License](LICENSE)。
+- **另外三只桌宠的形象**（`companions/*/Assets/v3/`）：ai-chan-sheets 里 GPT娘（白龙娘）、Grok娘、DeepSeek娘 Q版冬装 2 的设定图表情，补全部分 CC BY-NC-SA 4.0；原始角色设定 ZipZipPipe（DeepSeek娘 Q版冬装的来源图作者未标注）。
 - **v3 小人**（`Assets/v3/`）：Claude娘设定图的 8 种表情 · 设定图：[lmy414/ai-chan-sheets](https://github.com/lmy414/ai-chan-sheets) · 角色设定：ZipZipPipe · [CC BY-NC-SA 4.0](https://creativecommons.org/licenses/by-nc-sa/4.0/deed.zh-hans)。本项目去掉了白底、缩小了尺寸，按同一协议发布，**不能用于商业用途**。
 - **形象图片**（`Assets/daxiaojie/`）：素材：Claude大小姐的日记本（[github.com/opsCar/claude-daxiaojie-assets](https://github.com/opsCar/claude-daxiaojie-assets)）· 角色设定：ZipZipPipe（胖次狐）· 设定图：lmy414/ai-chan-sheets · [CC BY-NC-SA 4.0](https://creativecommons.org/licenses/by-nc-sa/4.0/deed.zh-hans)。本项目只缩小了尺寸并在构建时去掉白色外框，按同一协议发布，**不能用于商业用途**。
 - 「Claude」是 Anthropic 的商标；本项目是非官方的粉丝作品。

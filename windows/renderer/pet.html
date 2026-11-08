@@ -8,6 +8,11 @@
   html, body { background: transparent; overflow: hidden; width: 220px; height: 300px; }
   #stage { position: relative; width: 220px; height: 300px; }
   #face { position: absolute; left: 40px; top: 44px; width: 140px; height: 140px; object-fit: contain; -webkit-user-drag: none; }
+  #face.v3 { left: 26px; top: 14px; width: 168px; height: 170px; object-fit: contain; object-position: bottom; }
+  #face.hop { animation: hop .55s ease-out 2; }
+  #face.shake { animation: shake .12s linear 8; }
+  @keyframes hop { 0%, 100% { transform: translateY(0); } 45% { transform: translateY(-26px); } }
+  @keyframes shake { 0%, 100% { transform: translateX(0); } 25% { transform: translateX(-3px); } 75% { transform: translateX(3px); } }
   #stack { position: absolute; left: 0; right: 0; top: 180px; display: flex; flex-direction: column; align-items: center; gap: 4px; }
   .chip { max-width: 212px; padding: 5px 9px; border-radius: 10px; background: var(--chip-bg); color: var(--chip-text);
           border: 1px solid var(--chip-border); font-size: 11px; font-weight: 500; white-space: pre-line; line-height: 1.45; }
@@ -31,9 +36,14 @@
 </div>
 <script>
   const $ = (id) => document.getElementById(id);
-  let face = '';
+  let face = '', hopAt = 0, shakeAt = 0;
+  const replay = (cls) => { const f = $('face'); f.classList.remove('hop', 'shake'); void f.offsetWidth; f.classList.add(cls); };
   window.pet.onState((s) => {
-    if (s.face !== face) { face = s.face; $('face').src = `../assets/head/${face}.png`; }
+    const src = s.v3 ? `../assets/v3/face_${s.v3face}.png` : `../assets/head/${s.face}.png`;
+    if (src !== face) { face = src; $('face').src = src; }
+    $('face').classList.toggle('v3', !!s.v3);
+    if (s.hopAt !== hopAt) { if (hopAt) replay('hop'); hopAt = s.hopAt; }
+    if (s.shakeAt !== shakeAt) { if (shakeAt) replay('shake'); shakeAt = s.shakeAt; }
     $('pill').textContent = s.petPill;
     const t = $('task');
     t.classList.toggle('hide', !s.petTask);
@@ -57,11 +67,33 @@
     if (e.button !== 0 || !e.target.closest?.('.hit')) return;
     down = { x: e.screenX, y: e.screenY }; moved = 0;
   });
+  // A second click within 0.3 s is a double-click (jump); otherwise the click fires after that wait.
+  let pendingClick = null;
   document.addEventListener('mouseup', (e) => {
     if (e.button !== 0 || !down) return;
     down = null;
-    if (moved > 3) window.pet.dragEnd(); else window.pet.click();
+    if (moved > 3) { window.pet.dragEnd(); return; }
+    if (pendingClick) { clearTimeout(pendingClick); pendingClick = null; window.pet.dblclick(); return; }
+    pendingClick = setTimeout(() => { pendingClick = null; window.pet.click(); }, 300);
   });
+  // Petting: the pointer rubbing left and right over her (4 turns within 1.6 s).
+  let rubX = null, rubDir = 0, turns = [], lastPet = 0;
+  $('face').addEventListener('mousemove', (e) => {
+    if (down) return;
+    if (rubX !== null) {
+      const dx = e.screenX - rubX;
+      if (Math.abs(dx) > 1.5) {
+        const dir = dx > 0 ? 1 : -1, now = Date.now();
+        if (rubDir && dir !== rubDir) {
+          turns = turns.filter((t) => now - t < 1600).concat(now);
+          if (turns.length >= 4 && now - lastPet > 6000) { lastPet = now; turns = []; window.pet.petted(); }
+        }
+        rubDir = dir;
+      }
+    }
+    rubX = e.screenX;
+  });
+  $('face').addEventListener('mouseleave', () => { rubX = null; turns = []; });
   document.addEventListener('contextmenu', (e) => { if (e.target.closest?.('.hit')) { e.preventDefault(); window.pet.menu(); } });
   document.addEventListener('mouseleave', () => { if (!down) { over = false; window.pet.mouse(false); } });
 </script>

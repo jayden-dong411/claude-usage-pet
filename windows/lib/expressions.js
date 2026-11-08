@@ -1,4 +1,4 @@
-// Generated from ../Sources/Expressions.swift — the 80 Claude大小姐 head stickers grouped by situation.
+// Generated from ../Sources/Expressions.swift by gen-expressions.py — the 80 Claude大小姐 head stickers grouped by situation.
 module.exports = {
  "faces": {
   "breezy": [
@@ -162,6 +162,31 @@ module.exports = {
    "shy_peek",
    "mic",
    "stare"
+  ],
+  "petted": [
+   "blush",
+   "shy_peek",
+   "headpat",
+   "love",
+   "heart_hands",
+   "kiss",
+   "giggle"
+  ],
+  "hop": [
+   "starry",
+   "peace",
+   "kawaii_pose",
+   "happy",
+   "laugh",
+   "wink"
+  ],
+  "care": [
+   "tea_sip",
+   "pat_viewer",
+   "headpat",
+   "nod",
+   "yawn",
+   "good_night"
   ]
  },
  "lines": {
@@ -203,6 +228,18 @@ module.exports = {
    "有会话在等你哦～",
    "快来看看嘛！",
    "本小姐在这里等你呢"
+  ],
+  "petted": [
+   "诶嘿嘿…",
+   "别、别摸了啦…",
+   "头发要乱掉了啦！",
+   "哼，就让你摸一下下",
+   "好、好舒服…才没有！"
+  ],
+  "hop": [
+   "嘿咻～",
+   "跳起来啦！",
+   "看本小姐的弹跳力！"
   ]
  }
 };

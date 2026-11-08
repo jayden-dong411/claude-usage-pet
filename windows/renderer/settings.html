@@ -29,7 +29,8 @@
   <div><h3>外观</h3><div class="group">
     <div class="item"><label>大小</label><input type="range" data-k="scale" min="0.6" max="1.6" step="0.05"><span class="val" data-v="scale"></span></div>
     <div class="item"><label>透明度</label><input type="range" data-k="opacity" min="0.3" max="1" step="0.05"><span class="val" data-v="opacity"></span></div>
-    <div class="item"><label>表情轮换间隔</label><input type="range" data-k="rotateSeconds" min="10" max="180" step="5"><span class="val" data-v="rotateSeconds"></span></div>
+    <div class="item"><label>形象</label><select data-k="figure"><option value="stickers">表情头像</option><option value="v3">v3 小人</option></select></div>
+    <div class="item"><label>表情轮换间隔</label><input type="range" data-k="rotateSeconds" min="5" max="120" step="1"><span class="val" data-v="rotateSeconds"></span></div>
     <div class="item"><label>偶尔说句话</label><label class="sw"><input type="checkbox" data-k="chatter"><span></span></label></div>
   </div></div>
   <div><h3>什么时候出现</h3><div class="group">
@@ -40,11 +41,14 @@
   <div><h3>提醒</h3><div class="group">
     <div class="item"><label>会话等你批准或回复时提醒</label><label class="sw"><input type="checkbox" data-k="alertWaiting"><span></span></label></div>
     <div class="item"><label>桌宠隐藏时用系统通知提醒</label><label class="sw"><input type="checkbox" data-k="notifications"><span></span></label></div>
+    <div class="item"><label>连续使用 2 小时提醒起来活动</label><label class="sw"><input type="checkbox" data-k="sitReminder"><span></span></label></div>
+    <div class="item"><label>凌晨 0–5 点还在用时提醒睡觉</label><label class="sw"><input type="checkbox" data-k="nightReminder"><span></span></label></div>
+    <div class="item"><label>专注时长</label><input type="range" data-k="focusMinutes" min="10" max="60" step="5"><span class="val" data-v="focusMinutes"></span></div>
   </div></div>
   <div class="row"><span class="spacer"></span><button class="btn" id="reset">恢复默认</button></div>
 </div>
 <script>
-  const fmt = { scale: (v) => `${Math.round(v * 100)}%`, opacity: (v) => `${Math.round(v * 100)}%`, rotateSeconds: (v) => `约 ${v} 秒` };
+  const fmt = { scale: (v) => `${Math.round(v * 100)}%`, opacity: (v) => `${Math.round(v * 100)}%`, rotateSeconds: (v) => `约 ${v} 秒`, focusMinutes: (v) => `${v} 分钟` };
   let dragging = false;
   window.pet.onState((s) => {
     if (dragging) return;
@@ -55,7 +59,8 @@
     document.querySelectorAll('[data-v]').forEach((el) => { el.textContent = fmt[el.dataset.v](s.settings[el.dataset.v]); });
   });
   document.querySelectorAll('[data-k]').forEach((el) => {
-    if (el.type === 'checkbox') el.addEventListener('change', () => window.pet.act('setSetting', el.dataset.k, el.checked));
+    if (el.tagName === 'SELECT') el.addEventListener('change', () => window.pet.act('setSetting', el.dataset.k, el.value));
+    else if (el.type === 'checkbox') el.addEventListener('change', () => window.pet.act('setSetting', el.dataset.k, el.checked));
     else {
       el.addEventListener('input', () => {
         dragging = true;

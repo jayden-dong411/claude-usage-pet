@@ -28,6 +28,17 @@
   .tasks { display: flex; flex-direction: column; gap: 10px; max-height: 300px; overflow-y: auto; }
   .foot { font-size: 11px; color: var(--text-2); }
   svg.spark { display: block; }
+  .switch { display: flex; gap: 4px; padding: 3px; border-radius: 10px; background: var(--card); }
+  .switch button { flex: 1; border: 0; border-radius: 8px; padding: 7px 0; font: inherit; font-weight: 600; cursor: pointer;
+                   background: transparent; color: var(--text); }
+  .switch button.on { background: var(--accent); color: #fff; }
+  .fold { display: flex; gap: 6px; align-items: center; cursor: pointer; user-select: none; }
+  .fold .chev { display: inline-block; transition: transform .15s; color: var(--text-2); }
+  .fold.open .chev { transform: rotate(90deg); }
+  .fold .sum { font-size: 11px; color: var(--text-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; flex: 1; min-width: 0; }
+  .peer { padding: 10px; border-radius: 8px; cursor: pointer; }
+  .peer .ph { display: flex; gap: 6px; align-items: baseline; margin-bottom: 6px; }
+  .peer .ph b { font-size: 12.5px; }
 </style>
 </head>
 <body>
@@ -85,10 +96,11 @@
         <div style="margin-top:6px;cursor:pointer" data-act="dashboard">${U.heatmap(s.days, { weeks: 22, cell: 10, gap: 3, hoverId: 'panel-heat' })}</div>
         ${s.indexing && !Object.keys(s.days).length ? `<div class="faint" style="font-size:11px">正在统计会话记录… ${Math.round(s.indexProgress * 100)}%</div>` : ''}</div>
       <hr>
-      <div class="row head"><img src="../assets/head/${s.face}.png" alt="">
+      <div class="row head"><img src="${s.v3 ? `../assets/v3/face_${s.v3face}.png` : `../assets/head/${s.face}.png`}" alt="" data-act="toggleFigure" title="${s.hasV3 ? '点头像切换形象' : ''}">
         <div style="flex:1;min-width:0"><div class="row" style="gap:6px"><b style="font-size:14px">Claude大小姐</b><span class="badge">${s.levelName}</span></div>
         <div class="meta">${U.esc(who || '大小姐现在：' + s.levelName)}</div></div>
         <button class="link" style="font-size:16px" data-act="refresh" title="刷新用量">${s.loadingUsage ? '…' : '⟳'}</button></div>
+      ${s.hasV3 ? `<div class="switch"><button class="${s.v3 ? '' : 'on'}" data-act="figStickers">☺ 表情头像</button><button class="${s.v3 ? 'on' : ''}" data-act="figV3">♟ v3 小人</button></div>` : ''}
       ${limit('5 小时限额', u?.fiveHour, now, s.forecast5)}
       ${spark(s.spark)}
       ${limit('每周限额（7 天）', u?.sevenDay, now, s.forecast7)}
@@ -96,7 +108,13 @@
       ${s.usageError && (!u || s.needsLogin) ? `<div class="box"><div class="meta" style="white-space:normal">${U.esc(s.usageError)}</div>
         ${s.needsLogin ? `<button class="btn primary" style="margin-top:6px" data-act="login">登录 claude.ai 查看用量</button>` : ''}</div>` : ''}
       ${!s.settings.hasSecondary ? `<button class="link" data-act="loginSecond" style="align-self:flex-start">＋ 添加另一个账号</button>` : ''}`;
-    if (s.settings.hasSecondary) {
+    // "其他额度": second account + other tools, folded into one summary row.
+    const sums = [];
+    if (s.settings.hasSecondary) sums.push(`另一个账号 ${s.secondary?.fiveHour ? Math.round(s.secondary.fiveHour.utilization) + '%' : '—'}`);
+    for (const p of s.peers) sums.push(p.short || `${p.provider === 'codex' ? 'Codex' : p.title} ${p.windows[0] ? Math.round(p.windows[0].utilization) + '%' : '—'}`);
+    const open = s.settings.peersExpanded;
+    if (sums.length) html += `<div class="fold ${open ? 'open' : ''}" data-act="togglePeers"><span class="chev">›</span><b style="font-size:13px">其他额度</b><span class="sum">${U.esc(sums.join(' · '))}</span></div>`;
+    if (s.settings.hasSecondary && open) {
       const b = s.secondary;
       const mini = (t, w) => `<div style="flex:1"><div class="row" style="font-size:12px"><span>${t}</span><span class="spacer"></span><b class="mono" style="color:${w ? U.barColor(w.utilization) : 'var(--text-3)'}">${w ? Math.round(w.utilization) + '%' : '—'}</b></div>
         <div class="bar thin" style="margin:3px 0"><i style="width:${w ? w.utilization : 0}%;background:${w ? U.barColor(w.utilization) : 'transparent'}"></i></div>
@@ -104,6 +122,18 @@
       html += `<div class="box"><div class="row"><b>另一个账号</b><span class="meta">${U.esc(b ? [b.account, b.plan].filter(Boolean).join(' · ') : '')}</span></div>
         ${b ? `<div class="row" style="gap:14px;margin-top:8px;align-items:flex-start">${mini('5 小时', b.fiveHour)}${mini('每周', b.sevenDay)}</div>`
             : `<div class="row" style="margin-top:6px"><span class="meta">${U.esc(s.secondaryError || '读取中…')}</span><span class="spacer"></span><button class="btn" data-act="loginSecond">登录</button></div>`}</div>`;
+    }
+    if (open) for (const p of s.peers) {
+      const tint = { codex: '110,92,219', grok: '199,158,51', deepseek: '77,107,254' }[p.provider] || '150,150,150';
+      const icon = { codex: '✦', grok: '⚡', deepseek: '🐟' }[p.provider] || '•';
+      const wins = p.windows.map((w) => `<div style="flex:1"><div class="row" style="font-size:12px"><span>${w.label}</span><span class="spacer"></span><b class="mono" style="color:${U.barColor(w.utilization)}">${Math.round(w.utilization)}%</b></div>
+        <div class="bar thin" style="margin:3px 0"><i style="width:${Math.min(100, w.utilization)}%;background:${U.barColor(w.utilization)}"></i></div>
+        <div class="meta">${w.resetsAt ? U.when(w.resetsAt) + ' 重置' : '还没开始计时'}</div></div>`).join('');
+      html += `<div class="peer" style="background:rgba(${tint},.1)" data-act="openPeer:${p.provider}">
+        <div class="ph"><span style="color:rgb(${tint})">${icon}</span><b>${U.esc(p.title)} ${p.provider === 'deepseek' ? '余额' : '额度'}</b><span class="meta">${U.esc(p.plan || '')}</span><span class="spacer"></span><span class="faint" style="font-size:10px">${U.when(p.observedAt)} 的数据</span></div>
+        ${wins ? `<div class="row" style="gap:14px;align-items:flex-start">${wins}</div>` : ''}
+        ${(p.lines || []).map((l) => `<div class="meta">${U.esc(l)}</div>`).join('')}
+        ${p.note ? `<div class="faint" style="font-size:10px;margin-top:4px">${U.esc(p.note)}${p.provider === 'codex' && s.codexError ? `（实时查询失败：${U.esc(s.codexError)}）` : ''}</div>` : ''}</div>`;
     }
     html += `<hr>
       <div><div class="row"><h3>正在进行的任务</h3><span class="spacer"></span>
@@ -120,7 +150,13 @@
   root.addEventListener('click', (e) => {
     const t = e.target.closest('[data-act],[data-id]');
     if (!t) return;
-    if (t.dataset.id) act('openSession', t.dataset.id); else act(t.dataset.act);
+    if (t.dataset.id) return act('openSession', t.dataset.id);
+    const a = t.dataset.act;
+    if (a === 'figStickers') return act('setSetting', 'figure', 'stickers');
+    if (a === 'figV3') return act('setSetting', 'figure', 'v3');
+    if (a === 'toggleFigure') return act('setSetting', 'figure', document.querySelector('.switch .on')?.dataset.act === 'figV3' ? 'stickers' : 'v3');
+    if (a.startsWith('openPeer:')) return act('openPeer', a.slice(9));
+    act(a);
   });
   window.pet.onState(render);
 </script>

@@ -1,5 +1,5 @@
 // Claude大小姐 · Claude 用量桌宠 — Windows (Electron) edition. Mirrors the macOS app in ../Sources.
-const { app, BrowserWindow, ipcMain, Menu, Tray, nativeImage, nativeTheme, screen, shell, Notification } = require('electron');
+const { app, BrowserWindow, ipcMain, Menu, Tray, nativeImage, nativeTheme, screen, shell, Notification, powerMonitor, net } = require('electron');
 const fs = require('fs');
 const path = require('path');
 const { loadSessions, ProgressTracker, decorate } = require('./lib/sessions');
@@ -8,6 +8,7 @@ const { UsageHistory } = require('./lib/history');
 const { WebFetcher, fetchOAuth, readDesktopCookies, CHROME_UA } = require('./lib/usage');
 const { Foreground } = require('./lib/foreground');
 const EXPR = require('./lib/expressions');
+const { readPeers, codexError } = require('./lib/peers');
 
 app.userAgentFallback = CHROME_UA;
 const args = process.argv.slice(1);
@@ -17,7 +18,7 @@ const DEMO = args.includes('--demo');
 
 if (!SNAPSHOT && !app.requestSingleInstanceLock()) app.quit();
 
-const ATTRIBUTION = '素材：Claude大小姐的日记本（github.com/opsCar/claude-daxiaojie-assets）· 角色设定：ZipZipPipe（胖次狐）· 设定图：lmy414/ai-chan-sheets · CC BY-NC-SA 4.0';
+const ATTRIBUTION = '素材：Claude大小姐的日记本（github.com/opsCar/claude-daxiaojie-assets）· 角色设定：ZipZipPipe（胖次狐）· 设定图：lmy414/ai-chan-sheets · CC BY-NC-SA 4.0；v3 小人：ai-chan-sheets 的 Claude娘设定图（CC BY-NC-SA 4.0）';
 const LEVEL_NAMES = ['暂无数据', '活力满满', '状态良好', '注意压力', '压力山大'];
 const CLAUDE_PROCS = ['claude'];                       // Claude desktop's process name (Claude.exe)
 const BASE = { w: 220, h: 300 };
@@ -25,8 +26,9 @@ const asset = (...p) => path.join(__dirname, 'assets', ...p);
 
 // ------------------------------------------------------------------ settings
 
-const DEFAULTS = { scale: 1, opacity: 1, rotateSeconds: 35, chatter: true, onlyWithClaude: true,
-  hideInFullscreen: false, alertWaiting: true, notifications: true, launchAtLogin: false, petPos: null, hasSecondary: false };
+const DEFAULTS = { scale: 1, opacity: 1, rotateSeconds: 12, chatter: true, onlyWithClaude: true,
+  hideInFullscreen: false, alertWaiting: true, notifications: true, launchAtLogin: false, petPos: null, hasSecondary: false,
+  figure: 'stickers', peersExpanded: false, focusMinutes: 25, sitReminder: true, nightReminder: true };
 let settingsFile, settings = { ...DEFAULTS };
 function loadSettings() {
   settingsFile = path.join(app.getPath('userData'), 'settings.json');
@@ -41,7 +43,12 @@ const state = {
   secondary: null, secondaryError: null,
   sessions: [], days: {}, indexing: false, indexProgress: 0, lastIndexed: null,
   face: 'hi', bubble: null,
+  v3face: 'smile', hopAt: 0, shakeAt: 0,           // v3 look + jump / shake animations in the pet page
+  peers: [], codexError: null,                     // other tools' usage (lib/peers.js)
+  focusEnd: 0, restEnd: 0,                          // focus timer
 };
+const V3_FACES = ['smile', 'calm', 'surprised', 'shy', 'pout', 'giggle', 'serious', 'aggrieved'];
+const hasV3 = () => fs.existsSync(asset('v3', 'face_smile.png'));
 let history, indexer, tracker, primaryWeb, secondaryWeb, foreground;
 let pet, panel, dashboard, settingsWin, tray;
 const logins = { main: null, second: null };
@@ -67,6 +74,8 @@ function payload() {
     forecast7: history.forecast(acct, false, state.usage?.sevenDay),
     spark: history.fiveHourSeries(acct, state.usage?.fiveHour),
     petTask: taskText(), petPill: pillText(), alert: state.sessions.some((s) => s.isWaiting),
+    v3: settings.figure === 'v3' && hasV3(), hasV3: hasV3(),
+    focusing: state.focusEnd > Date.now(), resting: state.restEnd > Date.now(),
     now: Date.now(),
   };
 }
@@ -79,12 +88,18 @@ function broadcast() {
     broadcastQueued = false;
     const p = payload();
     for (const w of [pet, panel, dashboard, settingsWin]) if (w && !w.isDestroyed()) w.webContents.send('state', p);
-    if (tray) tray.setToolTip(`Claude大小姐 · ${p.petPill}`);
+    if (tray) {
+      const f = state.usage?.fiveHour;
+      tray.setToolTip(`Claude大小姐 · 5h ${f ? Math.round(f.utilization) + '%' : '—'}` + (p.focusing || p.resting ? ` · ${p.petPill}` : ''));
+    }
   });
 }
 
 const clip = (s, n) => (s.length > n ? s.slice(0, n - 1) + '…' : s);
+const mmss = (ms) => { const s = Math.max(0, Math.ceil(ms / 1000)); return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`; };
 function pillText() {
+  if (state.focusEnd > Date.now()) return `🍅 专注 ${mmss(state.focusEnd - Date.now())}`;
+  if (state.restEnd > Date.now()) return `☕ 休息 ${mmss(state.restEnd - Date.now())}`;
   const u = state.usage;
   if (!u) return state.needsLogin ? '点我登录看用量' : '5h —  ·  7d —';
   const f = (w) => (w ? `${Math.round(w.utilization)}%` : '—');
@@ -116,7 +131,7 @@ let reactionUntil = 0, nextRotate = 0, moodKey = '', lastNudge = 0, bubbleTimer 
 function baseMoods() {
   const lv = level();
   const moods = [state.usage ? ['breezy', 'breezy', 'calm', 'strained', 'crushed'][lv] : 'noData'];
-  if (state.sessions.some((s) => s.isBusy)) moods.push('working');
+  if (state.sessions.some((s) => s.isBusy) || state.focusEnd > Date.now()) moods.push('working');
   if (settings.alertWaiting && state.sessions.some((s) => s.isWaiting)) moods.push('needsYou');
   const h = new Date().getHours();
   if (h >= 1 && h < 6) moods.push('night');
@@ -134,8 +149,33 @@ function say(text, seconds = 5) {
   bubbleTimer = setTimeout(() => { state.bubble = null; broadcast(); }, seconds * 1000);
   broadcast();
 }
+// v3 look: expression pools per state, mostly cheerful, swapped every 6–12 s.
+const V3_POOLS = { idle: ['smile', 'giggle', 'smile', 'shy', 'giggle', 'calm'], working: ['smile', 'giggle', 'serious', 'smile', 'calm'],
+  waiting: ['surprised', 'smile', 'shy'], strained: ['pout', 'smile', 'surprised'], crushed: ['aggrieved', 'pout', 'surprised'], sleepy: ['giggle', 'calm', 'shy'] };
+const V3_REACT = { taskDone: 'giggle', hop: 'giggle', petted: 'shy', oops: 'aggrieved', crushed: 'aggrieved', needsYou: 'surprised',
+  taskStarted: 'serious', working: 'serious' };
+let v3Next = 0;
+function v3State(moods) {
+  if (moods.includes('needsYou')) return 'waiting';
+  if (moods.includes('working')) return 'working';
+  if (moods[0] === 'strained') return 'strained';
+  if (moods[0] === 'crushed') return 'crushed';
+  if (moods.includes('night')) return 'sleepy';
+  return 'idle';
+}
+function v3Rotate(force) {
+  const now = Date.now();
+  if (!force && (now < v3Next || now < reactionUntil)) return;
+  const pool = V3_POOLS[v3State(baseMoods())].filter((f) => f !== state.v3face);
+  state.v3face = pool[Math.floor(Math.random() * pool.length)] || 'smile';
+  v3Next = now + (6 + Math.random() * 6) * 1000;
+}
 function react(mood, seconds = 5, text = null) {
   state.face = pick([mood]);
+  state.v3face = V3_REACT[mood] || 'smile';
+  if (mood === 'hop' || mood === 'taskDone') state.hopAt = Date.now();
+  if (mood === 'petted' || mood === 'oops') state.shakeAt = Date.now();
+  v3Next = Date.now() + seconds * 1000;
   reactionUntil = Date.now() + seconds * 1000;
   nextRotate = reactionUntil;
   if (text) say(text); else broadcast();
@@ -143,6 +183,7 @@ function react(mood, seconds = 5, text = null) {
 function tickFace() {
   const now = Date.now();
   if (now < reactionUntil) return;
+  if (settings.figure === 'v3' && now >= v3Next) { v3Rotate(true); broadcast(); }
   const w = state.sessions.find((s) => s.isWaiting);
   if (settings.alertWaiting && w && now - lastNudge > 180e3) {
     lastNudge = now;
@@ -157,7 +198,7 @@ function tickFace() {
   state.face = pick(moods);
   const base = settings.rotateSeconds;
   nextRotate = now + (base * (0.7 + Math.random() * 0.6)) * 1000;
-  if (settings.chatter && !changed && !state.bubble && Math.random() < 0.25) {
+  if (settings.chatter && !changed && !state.bubble && state.focusEnd < now && Math.random() < 0.25) {
     const m = moods[Math.floor(Math.random() * moods.length)];
     const lines = EXPR.lines[m] || [];
     if (lines.length) { say(lines[Math.floor(Math.random() * lines.length)], 4); return; }
@@ -252,6 +293,71 @@ async function refreshSecondary() {
     state.secondaryError = e.code === 'NOT_LOGGED_IN' ? '还没登录' : e.message;
   }
   broadcast();
+}
+
+async function refreshPeers() {
+  if (DEMO) return;
+  state.peers = await readPeers((url, opts) => net.fetch(url, opts));
+  state.codexError = codexError();
+  broadcast();
+}
+
+// ------------------------------------------------------------------ focus timer & wellness reminders
+
+let forceShowUntil = 0, streakStart = 0, nextSit = Infinity, lastActive = 0, lastNight = 0;
+
+function startFocus() {
+  state.restEnd = 0;
+  state.focusEnd = Date.now() + settings.focusMinutes * 60e3;
+  streakStart = 0;
+  react('taskStarted', 4, `专注 ${settings.focusMinutes} 分钟，开始！本小姐帮你看着时间～`);
+}
+function stopFocus() {
+  const was = state.focusEnd > Date.now();
+  state.focusEnd = 0; state.restEnd = 0;
+  say(was ? '好吧，这次就先到这里～' : '那就继续加油吧！');
+}
+function remind(mood, text, title) {
+  forceShowUntil = Date.now() + 12e3;
+  updateVisibility();
+  react(mood, 12, null);
+  say(text, 12);
+  if (settings.notifications && Notification.isSupported()) {
+    const n = new Notification({ title, body: text, icon: asset('icon.png') });
+    n.on('click', () => openPanel());
+    n.show();
+  }
+}
+function tickFocus() {
+  const now = Date.now();
+  if (state.focusEnd && now >= state.focusEnd) {
+    state.focusEnd = 0;
+    state.restEnd = now + 5 * 60e3;
+    remind('taskDone', `专注 ${settings.focusMinutes} 分钟完成！起来活动 5 分钟、喝口水吧～`, '🍅 专注完成');
+  } else if (state.restEnd && now >= state.restEnd) {
+    state.restEnd = 0; streakStart = 0;
+    remind('greet', '休息结束～ 要再来一轮专注的话右键我哦', '☕ 休息结束');
+  }
+  if (state.focusEnd || state.restEnd) broadcast();
+}
+function tickWellness() {
+  const now = Date.now();
+  const idle = powerMonitor.getSystemIdleTime();               // seconds
+  const fg = foreground?.current || { known: false };
+  if (idle < 120 && (!fg.known || CLAUDE_PROCS.includes(fg.name))) lastActive = now;
+  if (idle >= 300 || now - lastActive > 600e3 || state.focusEnd || state.restEnd) streakStart = 0;
+  else if (!streakStart) { streakStart = now; nextSit = now + 2 * 3600e3; }
+  if (settings.sitReminder && streakStart && now >= nextSit) {
+    nextSit = now + 30 * 60e3;
+    const mins = Math.floor((now - streakStart) / 60e3);
+    const span = mins >= 60 ? `${Math.floor(mins / 60)} 小时${mins % 60 ? ` ${mins % 60} 分` : ''}` : `${mins} 分钟`;
+    remind('care', `已经连续用了 ${span}啦，站起来走走、喝口水吧～`, '🧋 该活动啦');
+  }
+  const h = new Date().getHours();
+  if (settings.nightReminder && h < 5 && now - lastActive < 120e3 && now - lastNight > 3600e3) {
+    lastNight = now;
+    remind('night', `已经 ${h === 0 ? 12 : h} 点多了，早点休息吧～`, '🌙 该睡啦');
+  }
 }
 
 async function refreshIndex() {
@@ -375,7 +481,8 @@ function updateVisibility() {
   if (!pet || pet.isDestroyed() || SNAPSHOT) return;
   const fg = foreground?.current || { known: false };
   let show = true;
-  if (settings.onlyWithClaude && fg.known) {
+  if (Date.now() < forceShowUntil) show = true;
+  else if (settings.onlyWithClaude && fg.known) {
     const ours = ['claudeusagepet', 'electron', app.getName().toLowerCase()].includes(fg.name);
     show = CLAUDE_PROCS.includes(fg.name) || ours || ownWindowFocused();
   }
@@ -386,11 +493,23 @@ function updateVisibility() {
 
 // ------------------------------------------------------------------ menus & tray
 
+function focusItems() {
+  if (state.focusEnd > Date.now()) return [{ label: `结束专注（还剩 ${mmss(state.focusEnd - Date.now())}）`, click: stopFocus }];
+  if (state.restEnd > Date.now()) return [{ label: `跳过休息（还剩 ${mmss(state.restEnd - Date.now())}）`, click: stopFocus },
+    { label: `再专注 ${settings.focusMinutes} 分钟`, click: startFocus }];
+  return [{ label: `🍅 开始专注 ${settings.focusMinutes} 分钟`, click: startFocus }];
+}
 function menuTemplate() {
   return [
+    ...(hasV3() ? [
+      { label: '形象：表情头像', type: 'radio', checked: settings.figure !== 'v3', click: () => setSetting('figure', 'stickers') },
+      { label: '形象：v3 小人', type: 'radio', checked: settings.figure === 'v3', click: () => setSetting('figure', 'v3') },
+      { type: 'separator' }] : []),
     { label: '查看用量和任务', click: openPanel },
     { label: '用量统计…', click: openDashboard },
-    { label: '立即刷新', click: () => { refreshUsage(); say('刷新好啦'); } },
+    { label: '立即刷新', click: () => { refreshUsage(); refreshPeers(); say('刷新好啦'); } },
+    { type: 'separator' },
+    ...focusItems(),
     { type: 'separator' },
     { label: '登录 / 切换 claude.ai 账号…', click: () => openLogin('main') },
     { label: '退出 claude.ai 登录', click: async () => { await primaryWeb.clear(); state.usage = null; refreshUsage(); say('已退出 claude.ai 登录'); } },
@@ -435,6 +554,7 @@ function setSetting(key, value) {
   if (key === 'opacity' && pet) pet.setOpacity(value);
   if (key === 'launchAtLogin') app.setLoginItemSettings({ openAtLogin: !!value });
   if (key === 'onlyWithClaude' || key === 'hideInFullscreen') updateVisibility();
+  if (key === 'figure') { v3Rotate(true); react('greet', 3, value === 'v3' ? '换成 v3 小人啦～' : '换回表情头像啦～'); }
   broadcast();
 }
 
@@ -445,6 +565,11 @@ ipcMain.on('pet-click', () => { if (!panel || !panel.isVisible()) react('clicked
 ipcMain.on('pet-drag', (_e, { dx, dy }) => { if (!pet) return; const [x, y] = pet.getPosition(); pet.setPosition(x + dx, y + dy); });
 ipcMain.on('pet-drag-end', () => { if (!pet) return; const [x, y] = pet.getPosition(); settings.petPos = { x, y }; saveSettings(); if (panel) panel.hide(); });
 ipcMain.on('pet-menu', () => Menu.buildFromTemplate(menuTemplate()).popup({ window: pet }));
+ipcMain.on('pet-dblclick', () => { if (panel) panel.hide(); react('hop', 2.4, Math.random() < 0.34 ? '嘿咻～' : null); });
+ipcMain.on('pet-petted', () => {
+  const lines = EXPR.lines.petted || ['诶嘿嘿…'];
+  react('petted', 4, lines[Math.floor(Math.random() * lines.length)]);
+});
 ipcMain.on('panel-size', (_e, h) => {
   if (!panel) return;
   const wa = screen.getDisplayMatching(panel.getBounds()).workArea;
@@ -463,7 +588,11 @@ ipcMain.handle('act', async (_e, name, ...a) => {
     case 'credits': return shell.openExternal('https://github.com/opsCar/claude-daxiaojie-assets');
     case 'quit': return farewell();
     case 'setSetting': return setSetting(a[0], a[1]);
-    case 'resetSettings': for (const k of ['scale', 'opacity', 'rotateSeconds', 'chatter', 'onlyWithClaude', 'hideInFullscreen', 'alertWaiting', 'notifications']) setSetting(k, DEFAULTS[k]); return;
+    case 'togglePeers': return setSetting('peersExpanded', !settings.peersExpanded);
+    case 'openPeer': return shell.openExternal({ codex: 'https://chatgpt.com/codex', grok: 'grokbot://', deepseek: 'https://platform.deepseek.com/usage' }[a[0]] || 'https://claude.ai');
+    case 'startFocus': return startFocus();
+    case 'stopFocus': return stopFocus();
+    case 'resetSettings': for (const k of ['scale', 'opacity', 'rotateSeconds', 'chatter', 'onlyWithClaude', 'hideInFullscreen', 'alertWaiting', 'notifications', 'focusMinutes', 'sitReminder', 'nightReminder']) setSetting(k, DEFAULTS[k]); return;
     case 'state': return payload();
     default: return null;
   }
@@ -488,6 +617,16 @@ function demoData() {
   state.usage = { fiveHour: w(63, 7800), sevenDay: w(28, 340000), extras: [], account: 'demo@example.com', plan: 'Max', source: '演示数据' };
   state.secondary = { fiveHour: w(18, 12000), sevenDay: w(41, 200000), extras: [], account: 'other@example.com', plan: 'Pro', source: '另一个账号' };
   settings.hasSecondary = true;
+  state.peers = [
+    { provider: 'codex', title: 'ChatGPT · Codex', plan: 'Plus', observedAt: now - 60e3,
+      windows: [{ label: '5 小时', utilization: 22, resetsAt: now + 9000e3 }, { label: '每周', utilization: 47, resetsAt: now + 300000e3 }] },
+    { provider: 'grok', title: 'Grok Bot', plan: 'Premium', observedAt: now - 600e3, windows: [{ label: '每周', utilization: 43, resetsAt: now + 370000e3 }] },
+    { provider: 'deepseek', title: 'DeepSeek', windows: [], observedAt: now - 120e3, short: 'DeepSeek ¥16.96',
+      lines: ['余额 ¥16.96', '今天花了 ¥1.04 · 近 7 天 ¥9.21', '按近 7 天的速度约还能用 12 天'] },
+  ];
+  if (args.includes('--expand')) settings.peersExpanded = true;
+  if (args.includes('--v3')) settings.figure = 'v3';
+  if (args.includes('--focus')) state.focusEnd = now + (23 * 60 + 12) * 1000;
   state.lastUsageUpdate = now; state.lastIndexed = now;
   history.loadDemo('demo@example.com', 63);
   let seed = 42;
@@ -569,7 +708,11 @@ app.whenReady().then(async () => {
   refreshSessions(false);
   refreshUsage();
   refreshIndex();
+  refreshPeers();
   react('greet', 5, '本小姐驾到～ 点我看用量');
+  setInterval(refreshPeers, 60e3);
+  setInterval(tickFocus, 1000);
+  setInterval(tickWellness, 2000);
   setInterval(() => refreshSessions(true), 3000);
   setInterval(refreshUsage, 90e3);
   setInterval(refreshIndex, 180e3);
