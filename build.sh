@@ -54,6 +54,8 @@ if [[ -f "$ROOT/Assets/v3/face_smile.png" ]]; then
   echo "  已包含 v3 小人素材"
 fi
 
+cp "$ROOT/Assets/banter.json" "$RES/banter.json"       # what the pets say (shared by all pets)
+
 echo "• 生成图标…"
 ICONSET="$TMP/AppIcon.iconset"
 mkdir -p "$ICONSET"

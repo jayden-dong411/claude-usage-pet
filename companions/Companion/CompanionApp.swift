@@ -64,7 +64,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, NSW
     private var reactionLoops = 0
     private var moodKey = ""
     private var lastNudge = Date.distantPast
-    private var nextChatter = Date().addingTimeInterval(40)
+    private var nextChatter = Date().addingTimeInterval(12)
     private var dragAnim: Anim?
     private var lastMouse = NSPoint.zero
     private var mouseMovedAt = Date.distantPast
@@ -189,7 +189,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, NSW
             self.togglePopover()
         }
         petView.onDoubleClick = { [weak self] in self?.hop() }
-        petView.onPet = { [weak self] in self?.react(.petted, loops: 3, seconds: 3.5, say: Mood.petted.lines.randomElement()) }
+        petView.onPet = { [weak self] in self?.react(.petted, loops: 3, seconds: 3.5, say: Banter.line(Spec.petID, "petted") ?? Mood.petted.lines.randomElement()) }
         petView.petRect = { [weak self] in self?.imageView.frame ?? .zero }
         petView.onDragStart = { [weak self] in self?.popover?.performClose(nil) }
         petView.onDragMove = { [weak self] dx in
@@ -415,12 +415,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, NSW
             moodKey = mood.rawValue
             if anim != mood.anim { setAnim(mood.anim) }
         }
-        if settings.chatter, !hub.focusing, now >= nextChatter, bubble.isHidden, let line = mood.lines.randomElement() {
-            say(line, seconds: 4)
-        }
         if now >= nextChatter {
-            let base = settings.rotateSeconds
-            nextChatter = now.addingTimeInterval(.random(in: base * 1.4...base * 2.6))
+            let base = hub.settings.chatterSeconds
+            nextChatter = now.addingTimeInterval(.random(in: base * 0.7...base * 1.3))
+            var moods = [mood.rawValue]
+            if (1..<6).contains(Calendar.current.component(.hour, from: now)) { moods.append("night") }
+            if settings.chatter, !hub.focusing, bubble.isHidden,
+               let line = Banter.chatter(Spec.petID, moods: moods, vars: Spec.banterVars(model)) ?? mood.lines.randomElement() {
+                say(line, seconds: 4.5)
+            }
         }
     }
 
@@ -438,7 +441,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, NSW
     private func hop() {
         popover?.performClose(nil)
         react(.hop, loops: 2, seconds: 2.2)
-        if Int.random(in: 0..<3) == 0, let line = Mood.hop.lines.randomElement() { say(line, seconds: 2.5) }
+        if Int.random(in: 0..<2) == 0, let line = Banter.line(Spec.petID, "hop") ?? Mood.hop.lines.randomElement() { say(line, seconds: 2.5) }
     }
 
     // MARK: Look toward the mouse while idle (sprite only)
@@ -476,6 +479,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, NSW
     private func say(_ text: String, seconds: Double = 5) {
         bubble.set(text, centerX: baseSize.width / 2, y: v3Mode ? v3Home.maxY - 2 : imgY + imgSize.height - 4,
                    maxWidth: baseSize.width - 8, radius: 12)
+        bubble.keepBelow(baseSize.height - 2)
         if let v3 { v3.show(v3.face, seconds: seconds) }
         bubble.isHidden = false
         bubbleHide?.cancel()
@@ -530,6 +534,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, NSW
         updateVisibility()
         react(mood, loops: 4, seconds: 12)
         say(e.text, seconds: 12)
+    }
+
+    func hubDuet(_ lines: [DuetLine], total: Double) {
+        forceShowUntil = Date().addingTimeInterval(total)
+        updateVisibility()
+        for l in lines {
+            DispatchQueue.main.asyncAfter(deadline: .now() + l.delay) { [weak self] in
+                guard let self else { return }
+                self.react(.clicked, loops: 1, seconds: 3.4)
+                self.say(l.text, seconds: 3.4)
+            }
+        }
+        nextChatter = Date().addingTimeInterval(total + 10)
     }
 
     func hubShowPanel() {

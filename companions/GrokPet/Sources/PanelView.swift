@@ -75,6 +75,7 @@ struct PanelView: View {
         }
         .padding(16)
         .frame(width: 350)
+        .fitsScreen()
     }
 
     private var header: some View {

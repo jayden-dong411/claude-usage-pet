@@ -8,7 +8,10 @@
     "description": "GPT龙娘 · ChatGPT / Codex 额度桌宠（Windows 版）",
     "main": "main-gpt.js"
   },
-  "directories": { "output": "../dist/windows", "buildResources": "build-res" },
+  "directories": {
+    "output": "../dist/windows",
+    "buildResources": "build-res"
+  },
   "files": [
     "main-gpt.js",
     "preload.js",
@@ -16,12 +19,26 @@
     "lib/**",
     "renderer/**",
     "assets/gpt-v3/**",
-    "assets/gpt-icon.png"
+    "assets/gpt-icon.png",
+    "assets/banter.json"
   ],
   "asar": true,
   "win": {
     "executableName": "GPTDragonPet",
-    "target": [ { "target": "nsis", "arch": ["x64"] }, { "target": "zip", "arch": ["x64"] } ],
+    "target": [
+      {
+        "target": "nsis",
+        "arch": [
+          "x64"
+        ]
+      },
+      {
+        "target": "zip",
+        "arch": [
+          "x64"
+        ]
+      }
+    ],
     "icon": "build-res/gpt-icon.png",
     "signAndEditExecutable": false
   },

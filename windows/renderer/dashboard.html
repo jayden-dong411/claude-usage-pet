@@ -32,7 +32,32 @@
 <script src="common.js"></script>
 <script>
   const root = document.getElementById('root');
-  let S = null, range = 14, metric = 'total';
+  let S = null, range = 14, metric = 'total', source = null;
+  const SOURCES = { claude: 'Claude Code', codex: 'Codex', all: 'Claude + Codex' };
+  const NOTES = {
+    claude: '数据来自这台电脑上 ~/.claude/projects 里的 Claude Code 会话记录（桌面版和终端都算），不含其他设备。',
+    codex: '数据来自这台电脑上 ~/.codex/sessions 里的 Codex 会话记录（ChatGPT 桌面版和 Codex 命令行都算），不含网页版、手机和云端任务。',
+  };
+  const CODEX_COLOR = '#6e5cdb';
+  const daysOf = (src) => (src === S.ownSource ? S.days : S.otherDays || {});
+  /** Claude and Codex added up per day (models and projects keep their own names). */
+  function mergedDays() {
+    const out = {};
+    for (const src of ['claude', 'codex']) for (const [k, d] of Object.entries(daysOf(src))) {
+      const o = out[k] || (out[k] = { tokens: { input: 0, output: 0, cacheWrite: 0, cacheRead: 0 }, messages: 0, activeSeconds: 0, sessions: [], models: {}, projects: {}, parts: {} });
+      for (const t in o.tokens) o.tokens[t] += d.tokens[t];
+      o.messages += d.messages; o.activeSeconds += d.activeSeconds; o.sessions = o.sessions.concat(d.sessions);
+      Object.assign(o.models, d.models);
+      for (const [p, v] of Object.entries(d.projects)) {
+        const q = o.projects[p] || (o.projects[p] = { tokens: { input: 0, output: 0, cacheWrite: 0, cacheRead: 0 }, activeSeconds: 0, messages: 0 });
+        for (const t in q.tokens) q.tokens[t] += v.tokens[t];
+        q.activeSeconds += v.activeSeconds;
+      }
+      o.parts[src] = d;
+    }
+    return out;
+  }
+  const curDays = () => (source === 'all' ? mergedDays() : daysOf(source));
   const METRICS = { total: ['全部', (t) => U.total(t)], io: ['输入+输出', (t) => t.input + t.output], cacheWrite: ['缓存写入', (t) => t.cacheWrite], cacheRead: ['缓存读取', (t) => t.cacheRead] };
   U.wireHeatmap(root, 'dash-heat');
 
@@ -59,7 +84,7 @@
     return [1, 2, 2.5, 5, 10].map((m) => m * p).find((s) => s >= raw);
   }
 
-  function barChart(id, series, valueOf, color, fmtY, tipOf, height) {
+  function barChart(id, series, valueOf, color, fmtY, tipOf, height, parts) {
     const el = document.getElementById(id);
     const W = el.clientWidth || 800, H = height, padL = 6, padR = 56, padT = 10, padB = 24;
     const vals = series.map(valueOf), stepV = niceStep(Math.max(...vals, 0)), ticks = Math.max(1, Math.ceil(Math.max(...vals, 0) / stepV)), max = stepV * ticks;
@@ -74,7 +99,16 @@
     series.forEach((d, i) => {
       const x = padL + slot * i + (slot - bw) / 2, v = vals[i], yy = y(v), h = Math.max(0, H - padB - yy);
       const r = Math.min(4, bw / 2, h);
-      if (h > 0) svg += `<path d="M${x},${H - padB}V${yy + r}Q${x},${yy} ${x + r},${yy}H${x + bw - r}Q${x + bw},${yy} ${x + bw},${yy + r}V${H - padB}Z" fill="${color}" data-i="${i}" class="b"/>`;
+      if (h > 0 && parts) {
+        // Stacked: first part at the bottom, the top one rounded.
+        let base = H - padB;
+        const ps = parts(d).filter((p) => p[0] > 0);
+        ps.forEach(([pv, pc], j) => {
+          const ph = (H - padT - padB) * (pv / max), top = base - ph, rr = j === ps.length - 1 ? Math.min(4, bw / 2, ph) : 0;
+          svg += `<path d="M${x},${base}V${top + rr}Q${x},${top} ${x + rr},${top}H${x + bw - rr}Q${x + bw},${top} ${x + bw},${top + rr}V${base}Z" fill="${pc}" data-i="${i}" class="b"/>`;
+          base = top;
+        });
+      } else if (h > 0) svg += `<path d="M${x},${H - padB}V${yy + r}Q${x},${yy} ${x + r},${yy}H${x + bw - r}Q${x + bw},${yy} ${x + bw},${yy + r}V${H - padB}Z" fill="${color}" data-i="${i}" class="b"/>`;
       svg += `<rect x="${padL + slot * i}" y="${padT}" width="${slot}" height="${H - padT - padB}" fill="transparent" data-i="${i}"/>`;
       if (i % step === 0 || i === n - 1 && n <= 7) svg += `<text x="${x + bw / 2}" y="${H - 6}" text-anchor="middle">${d.date.getMonth() + 1}/${d.date.getDate()}</text>`;
     });
@@ -104,18 +138,23 @@
 
   function render() {
     if (!S) return;
-    const series = U.series(S.days, range), tot = merge(series);
-    const today = S.days[U.dayKey(new Date())] || { tokens: { input: 0, output: 0, cacheWrite: 0, cacheRead: 0 }, messages: 0, activeSeconds: 0, sessions: [] };
+    if (!source) source = S.dashSource || S.ownSource || 'claude';
+    const both = Object.keys(S.otherDays || {}).length > 0;
+    if (!both) source = S.ownSource || 'claude';
+    const days = curDays();
+    const series = U.series(days, range), tot = merge(series);
+    const today = days[U.dayKey(new Date())] || { tokens: { input: 0, output: 0, cacheWrite: 0, cacheRead: 0 }, messages: 0, activeSeconds: 0, sessions: [] };
     const tile = (ico, tint, k, v, s) => `<div class="card tile"><span class="ico" style="background:color-mix(in srgb, ${tint} 16%, transparent);color:${tint}">${ico}</span>
       <div style="min-width:0"><div class="k">${k}</div><div class="v">${v}</div><div class="s">${s}</div></div></div>`;
     const seg = (name, opts, cur) => `<div class="seg" data-seg="${name}">${opts.map(([v, l]) => `<button data-v="${v}" class="${String(v) === String(cur) ? 'on' : ''}">${l}</button>`).join('')}</div>`;
     root.innerHTML = `
-      <div class="row" style="align-items:flex-start"><div><h1>${S.dashTitle || 'Claude Code 用量统计'}</h1>
+      <div class="row" style="align-items:flex-start"><div><h1>${SOURCES[source]} 用量统计</h1>
         <div class="muted" style="margin-top:3px">最近 ${range} 天 · ${U.hours(tot.activeSeconds)} · ${U.cn(U.total(tot.tokens))} token · ${tot.sessions.size} 个会话</div></div>
         <span class="spacer"></span><span class="muted" style="font-size:12px">${S.indexing ? (S.lastIndexed ? '更新中…' : `首次统计 ${Math.round(S.indexProgress * 100)}%`) : S.lastIndexed ? '更新于 ' + U.clock(S.lastIndexed) : ''}</span>
         <button class="link" data-act="refreshIndex" title="重新统计">⟳</button></div>
+      ${both ? `<div class="row">${seg('source', [['claude', 'Claude Code'], ['codex', 'Codex'], ['all', '合计']], source)}${source === 'all' ? `<span class="muted" style="font-size:12px;margin-left:10px"><i style="display:inline-block;width:9px;height:9px;border-radius:2px;background:var(--tokens)"></i> Claude Code　<i style="display:inline-block;width:9px;height:9px;border-radius:2px;background:${CODEX_COLOR}"></i> Codex</span>` : ''}</div>` : ''}
       <div class="card"><div class="row"><h3>每日 Token</h3><span class="faint" style="font-size:12px">颜色越深用得越多，悬停看当天详情</span></div>
-        <div style="margin-top:10px">${U.heatmap(S.days, { weeks: 38, cell: 13, gap: 4, hoverId: 'dash-heat' })}</div></div>
+        <div style="margin-top:10px">${U.heatmap(days, { weeks: 38, cell: 13, gap: 4, hoverId: 'dash-heat' })}</div></div>
       <h2>今天</h2>
       <div class="tiles">
         ${tile('◷', 'var(--time)', '使用时长', U.hours(today.activeSeconds), `${today.sessions.length} 个会话`)}
@@ -128,13 +167,15 @@
         <div class="chart" id="tok" style="margin-top:10px"></div></div>
       <div class="card"><h3>每天使用时长</h3><div class="chart" id="time" style="margin-top:10px"></div></div>
       <div class="two">${rank('按模型', Object.entries(tot.models))}${rank('按项目', Object.entries(tot.projects).map(([k, v]) => [k, v.tokens, v.secs]))}</div>
-      <div class="faint" style="font-size:11px">${S.dashNote || '数据来自这台电脑上 ~/.claude/projects 里的 Claude Code 会话记录（桌面版和终端都算），不含其他设备。使用时长按同一会话里相邻两条记录间隔不超过 5 分钟累计。'}</div>`;
-    if (S.dashTitle) document.title = S.dashTitle;
+      <div class="faint" style="font-size:11px">${source === 'all' ? NOTES.claude + NOTES.codex : NOTES[source]}使用时长按同一会话里相邻两条记录间隔不超过 5 分钟累计。</div>`;
+    document.title = `${SOURCES[source]} 用量统计`;
     const [label, fn] = METRICS[metric];
     barChart('tok', series, (d) => (d.stats ? fn(d.stats.tokens) : 0), 'var(--tokens)', (v) => U.cn(v),
-      (d) => `<b>${label} ${U.cn(d.stats ? fn(d.stats.tokens) : 0)}</b><div class="muted">${d.stats ? d.stats.messages : 0} 次回复</div>`, 210);
+      (d) => `<b>${label} ${U.cn(d.stats ? fn(d.stats.tokens) : 0)}</b>${source === 'all' && d.stats ? `<div class="muted">Claude ${U.cn(d.stats.parts.claude ? fn(d.stats.parts.claude.tokens) : 0)} · Codex ${U.cn(d.stats.parts.codex ? fn(d.stats.parts.codex.tokens) : 0)}</div>` : ''}<div class="muted">${d.stats ? d.stats.messages : 0} 次回复</div>`, 210,
+      source === 'all' ? (d) => [[d.stats?.parts.claude ? fn(d.stats.parts.claude.tokens) : 0, 'var(--tokens)'], [d.stats?.parts.codex ? fn(d.stats.parts.codex.tokens) : 0, CODEX_COLOR]] : null);
     barChart('time', series, (d) => (d.stats ? d.stats.activeSeconds / 3600 : 0), 'var(--time)', (v) => `${v.toFixed(v < 3 ? 1 : 0)} 时`,
-      (d) => `<b>${U.hours(d.stats ? d.stats.activeSeconds : 0)}</b><div class="muted">${d.stats ? d.stats.sessions.length : 0} 个会话</div>`, 160);
+      (d) => `<b>${U.hours(d.stats ? d.stats.activeSeconds : 0)}</b><div class="muted">${d.stats ? d.stats.sessions.length : 0} 个会话</div>`, 160,
+      source === 'all' ? (d) => [[d.stats?.parts.claude ? d.stats.parts.claude.activeSeconds / 3600 : 0, 'var(--time)'], [d.stats?.parts.codex ? d.stats.parts.codex.activeSeconds / 3600 : 0, CODEX_COLOR]] : null);
   }
 
   root.addEventListener('click', (e) => {
@@ -143,6 +184,7 @@
     const seg = b.parentElement?.dataset?.seg;
     if (seg === 'range') { range = +b.dataset.v; render(); }
     else if (seg === 'metric') { metric = b.dataset.v; render(); }
+    else if (seg === 'source') { source = b.dataset.v; render(); }
     else if (b.dataset.act) window.pet.act(b.dataset.act);
   });
   window.addEventListener('resize', render);

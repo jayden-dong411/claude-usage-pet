@@ -200,4 +200,4 @@ async function readPeers(fetchFn, exclude = 'claude') {
 
 const codexError = () => codexCache.error;
 
-module.exports = { readPeers, codexError, codexLive, codexLogs, writePeer, readPeer };
+module.exports = { readPeers, codexError, codexLive, codexLogs, writePeer, readPeer, shareDir };

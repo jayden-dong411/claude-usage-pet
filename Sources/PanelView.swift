@@ -203,6 +203,7 @@ struct PanelView: View {
         }
         .padding(16)
         .frame(width: 350)
+        .fitsScreen()
     }
 
     /// GitHub-style calendar of daily tokens; click to open the full statistics.

@@ -32,6 +32,8 @@
     <div class="item" id="figRow"><label>形象</label><select data-k="figure"><option value="stickers">表情头像</option><option value="v3">v3 小人</option></select></div>
     <div class="item"><label>表情轮换间隔</label><input type="range" data-k="rotateSeconds" min="5" max="120" step="1"><span class="val" data-v="rotateSeconds"></span></div>
     <div class="item"><label>偶尔说句话</label><label class="sw"><input type="checkbox" data-k="chatter"><span></span></label></div>
+    <div class="item"><label>说话频率</label><select data-k="chatterSeconds"><option value="90">安静（约 90 秒一句）</option><option value="30">适中（约 30 秒一句）</option><option value="15">话痨（约 15 秒一句）</option></select></div>
+    <div class="item"><label>和另一只桌宠偶尔聊天</label><label class="sw"><input type="checkbox" data-k="petChat"><span></span></label></div>
   </div></div>
   <div><h3>什么时候出现</h3><div class="group">
     <div class="item"><label><span class="host">Claude</span> 在前台时才显示</label><label class="sw"><input type="checkbox" data-k="onlyWithClaude"><span></span></label></div>
@@ -57,7 +59,7 @@
     document.getElementById('figRow').style.display = s.hasStickers === false ? 'none' : '';
     document.querySelectorAll('[data-k]').forEach((el) => {
       const v = s.settings[el.dataset.k];
-      if (el.type === 'checkbox') el.checked = !!v; else el.value = v;
+      if (el.type === 'checkbox') el.checked = !!v; else el.value = String(v);
     });
     document.querySelectorAll('[data-v]').forEach((el) => { el.textContent = fmt[el.dataset.v](s.settings[el.dataset.v]); });
   });

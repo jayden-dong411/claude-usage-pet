@@ -1,4 +1,5 @@
 import AppKit
+import SwiftUI
 
 // The pet window's view and its little rounded labels, shared by all four pets
 // (Claude大小姐, GPT龙娘, Grok娘, DeepSeek娘): click = panel, double-click = jump, rub the mouse
@@ -118,7 +119,7 @@ final class Chip: NSView {
         label.textColor = text
         label.alignment = .center
         label.lineBreakMode = .byWordWrapping
-        label.maximumNumberOfLines = 3
+        label.maximumNumberOfLines = 5
         addSubview(label)
         applyColors()
     }
@@ -148,4 +149,27 @@ final class Chip: NSView {
         label.frame = NSRect(x: padding.width, y: padding.height, width: w - padding.width * 2, height: s.height)
         layer?.cornerRadius = radius ?? h / 2
     }
+
+    /// Moves the chip down if its top would stick out above `top` (a long, wrapped speech bubble used to be
+    /// cut off by the top of the pet window).
+    func keepBelow(_ top: CGFloat) {
+        if frame.maxY > top { setFrameOrigin(NSPoint(x: frame.minX, y: max(0, top - frame.height))) }
+    }
+}
+
+// MARK: - Panels that never run off the screen
+
+/// Shows the panel at its natural height, but scrolls once it is taller than the screen (with
+/// 「其他额度」 open and many tasks the popover used to be cut off at the bottom of the screen).
+struct FitsScreen: ViewModifier {
+    private var limit: CGFloat { max(360, (NSScreen.main?.visibleFrame.height ?? 820) - 70) }
+
+    func body(content: Content) -> some View {
+        ScrollView(.vertical) { content.fixedSize(horizontal: false, vertical: true) }
+            .frame(maxHeight: limit)
+    }
+}
+
+extension View {
+    func fitsScreen() -> some View { modifier(FitsScreen()) }
 }

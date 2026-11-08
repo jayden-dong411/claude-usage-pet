@@ -44,6 +44,13 @@ enum Spec {
 
     static func hasUsage(_ m: AppModel) -> Bool { m.usage != nil }
 
+    static func banterVars(_ m: AppModel) -> [String: String] {
+        var v: [String: String] = [:]
+        if let w = m.usage?.fiveHour { v["five"] = "\(Int(w.utilization.rounded()))%" }
+        if let w = m.usage?.sevenDay { v["week"] = "\(Int(w.utilization.rounded()))%" }
+        return v
+    }
+
     static func panel(_ m: AppModel, _ a: PanelActions) -> AnyView {
         AnyView(PanelView(model: m, dashboard: stats, openClaude: a.openSession, openDashboard: a.openDashboard,
                           openSettings: a.openSettings, quit: a.quit))

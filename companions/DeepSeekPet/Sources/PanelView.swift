@@ -79,6 +79,7 @@ struct PanelView: View {
         }
         .padding(16)
         .frame(width: 350)
+        .fitsScreen()
     }
 
     /// Daily spend calendar; click to open the full statistics.

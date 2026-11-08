@@ -9,6 +9,9 @@ const { WebFetcher, fetchOAuth, readDesktopCookies, CHROME_UA } = require('./lib
 const { Foreground } = require('./lib/foreground');
 const EXPR = require('./lib/expressions');
 const { readPeers, codexError, writePeer } = require('./lib/peers');
+const banter = require('./lib/banter');
+const { DuetLink } = require('./lib/duet');
+const { CodexIndexer } = require('./lib/codex');
 
 app.userAgentFallback = CHROME_UA;
 const args = process.argv.slice(1);
@@ -28,7 +31,7 @@ const asset = (...p) => path.join(__dirname, 'assets', ...p);
 
 const DEFAULTS = { scale: 1, opacity: 1, rotateSeconds: 12, chatter: true, onlyWithClaude: true,
   hideInFullscreen: false, alertWaiting: true, notifications: true, launchAtLogin: false, petPos: null, hasSecondary: false,
-  figure: 'stickers', peersExpanded: false, focusMinutes: 25, sitReminder: true, nightReminder: true };
+  figure: 'stickers', peersExpanded: false, focusMinutes: 25, sitReminder: true, nightReminder: true, chatterSeconds: 30, petChat: true };
 let settingsFile, settings = { ...DEFAULTS };
 function loadSettings() {
   settingsFile = path.join(app.getPath('userData'), 'settings.json');
@@ -41,7 +44,7 @@ function saveSettings() { try { fs.writeFileSync(settingsFile, JSON.stringify(se
 const state = {
   usage: null, usageError: null, needsLogin: false, loadingUsage: false, lastUsageUpdate: null,
   secondary: null, secondaryError: null,
-  sessions: [], days: {}, indexing: false, indexProgress: 0, lastIndexed: null,
+  sessions: [], days: {}, otherDays: {}, indexing: false, indexProgress: 0, lastIndexed: null,
   face: 'hi', bubble: null,
   v3face: 'smile', hopAt: 0, shakeAt: 0,           // v3 look + jump / shake animations in the pet page
   peers: [], codexError: null,                     // other tools' usage (lib/peers.js)
@@ -49,7 +52,7 @@ const state = {
 };
 const V3_FACES = ['smile', 'calm', 'surprised', 'shy', 'pout', 'giggle', 'serious', 'aggrieved'];
 const hasV3 = () => fs.existsSync(asset('v3', 'face_smile.png'));
-let history, indexer, tracker, primaryWeb, secondaryWeb, foreground;
+let history, indexer, codexIndexer, duetLink, tracker, primaryWeb, secondaryWeb, foreground;
 let pet, panel, dashboard, settingsWin, tray;
 const logins = { main: null, second: null };
 let prevStatus = new Map();
@@ -74,7 +77,7 @@ function payload() {
     forecast7: history.forecast(acct, false, state.usage?.sevenDay),
     spark: history.fiveHourSeries(acct, state.usage?.fiveHour),
     petTask: taskText(), petPill: pillText(), alert: state.sessions.some((s) => s.isWaiting),
-    v3: settings.figure === 'v3' && hasV3(), hasV3: hasV3(),
+    v3: settings.figure === 'v3' && hasV3(), hasV3: hasV3(), ownSource: 'claude', dashSource: args.includes('--dash-all') ? 'all' : null,
     focusing: state.focusEnd > Date.now(), resting: state.restEnd > Date.now(),
     now: Date.now(),
   };
@@ -198,12 +201,34 @@ function tickFace() {
   state.face = pick(moods);
   const base = settings.rotateSeconds;
   nextRotate = now + (base * (0.7 + Math.random() * 0.6)) * 1000;
-  if (settings.chatter && !changed && !state.bubble && state.focusEnd < now && Math.random() < 0.25) {
-    const m = moods[Math.floor(Math.random() * moods.length)];
-    const lines = EXPR.lines[m] || [];
-    if (lines.length) { say(lines[Math.floor(Math.random() * lines.length)], 4); return; }
-  }
   broadcast();
+}
+
+// Says something on her own every `chatterSeconds` (±30%), from lib/banter.js.
+let nextChatter = Date.now() + 10e3;
+function tickChatter() {
+  const now = Date.now();
+  if (now < nextChatter || now < reactionUntil) return;
+  nextChatter = now + settings.chatterSeconds * (0.7 + Math.random() * 0.6) * 1000;
+  if (!settings.chatter || state.bubble || state.focusEnd > now) return;
+  const u = state.usage, pc = (w) => (w ? `${Math.round(w.utilization)}%` : undefined);
+  const moods = baseMoods();
+  const l = banter.chatter('claude', moods, { five: pc(u?.fiveHour), week: pc(u?.sevenDay) })
+    || (EXPR.lines[moods[0]] || [])[0];
+  if (l) say(l, 4.5);
+}
+
+// Two pets chatting (lib/duet.js): pop up for the exchange and say my lines.
+function duetLines(lines, total) {
+  forceShowUntil = Date.now() + total * 1000;
+  updateVisibility();
+  for (const l of lines) setTimeout(() => { react('clicked', 3.4); say(l.text, 3.4); }, l.delay * 1000);
+  nextChatter = Date.now() + (total + 10) * 1000;
+}
+function canChat() {
+  const fg = foreground?.current || { known: false };
+  return settings.petChat && !state.focusEnd && !state.restEnd && powerMonitor.getSystemIdleTime() < 120
+    && (!fg.known || ['claude', 'chatgpt', 'codex'].includes(fg.name));
 }
 
 function notify(title, body) {
@@ -368,6 +393,7 @@ async function refreshIndex() {
   state.indexing = true; broadcast();
   try {
     state.days = await indexer.run((p) => { state.indexProgress = p; broadcast(); });
+    state.otherDays = await codexIndexer.run();          // Codex, for the dashboard's Claude / Codex / 合计 switch
     state.lastIndexed = Date.now();
   } finally { state.indexing = false; broadcast(); }
 }
@@ -551,6 +577,7 @@ function farewell() {
 
 function setSetting(key, value) {
   if (!(key in DEFAULTS)) return;
+  if (typeof DEFAULTS[key] === 'number' && typeof value === 'string') value = +value;
   settings[key] = value;
   saveSettings();
   if (key === 'scale' && pet) { pet.setBounds(petBounds()); pet.webContents.setZoomFactor(value); }
@@ -568,10 +595,9 @@ ipcMain.on('pet-click', () => { if (!panel || !panel.isVisible()) react('clicked
 ipcMain.on('pet-drag', (_e, { dx, dy }) => { if (!pet) return; const [x, y] = pet.getPosition(); pet.setPosition(x + dx, y + dy); });
 ipcMain.on('pet-drag-end', () => { if (!pet) return; const [x, y] = pet.getPosition(); settings.petPos = { x, y }; saveSettings(); if (panel) panel.hide(); });
 ipcMain.on('pet-menu', () => Menu.buildFromTemplate(menuTemplate()).popup({ window: pet }));
-ipcMain.on('pet-dblclick', () => { if (panel) panel.hide(); react('hop', 2.4, Math.random() < 0.34 ? '嘿咻～' : null); });
+ipcMain.on('pet-dblclick', () => { if (panel) panel.hide(); react('hop', 2.4, Math.random() < 0.5 ? banter.line('claude', 'hop') : null); });
 ipcMain.on('pet-petted', () => {
-  const lines = EXPR.lines.petted || ['诶嘿嘿…'];
-  react('petted', 4, lines[Math.floor(Math.random() * lines.length)]);
+  react('petted', 4, banter.line('claude', 'petted') || '诶嘿嘿…');
 });
 ipcMain.on('panel-size', (_e, h) => {
   if (!panel) return;
@@ -595,7 +621,7 @@ ipcMain.handle('act', async (_e, name, ...a) => {
     case 'openPeer': return shell.openExternal({ codex: 'https://chatgpt.com/codex', grok: 'grokbot://', deepseek: 'https://platform.deepseek.com/usage' }[a[0]] || 'https://claude.ai');
     case 'startFocus': return startFocus();
     case 'stopFocus': return stopFocus();
-    case 'resetSettings': for (const k of ['scale', 'opacity', 'rotateSeconds', 'chatter', 'onlyWithClaude', 'hideInFullscreen', 'alertWaiting', 'notifications', 'focusMinutes', 'sitReminder', 'nightReminder']) setSetting(k, DEFAULTS[k]); return;
+    case 'resetSettings': for (const k of ['scale', 'opacity', 'rotateSeconds', 'chatter', 'onlyWithClaude', 'hideInFullscreen', 'alertWaiting', 'notifications', 'focusMinutes', 'sitReminder', 'nightReminder', 'chatterSeconds', 'petChat']) setSetting(k, DEFAULTS[k]); return;
     case 'state': return payload();
     default: return null;
   }
@@ -650,6 +676,8 @@ function demoData() {
       models: { 'claude-opus-5-5': tk, 'claude-haiku-5-5': { input: 0, output: Math.round(9000 * sc), cacheWrite: 0, cacheRead: Math.round(9e5 * sc) } }, projects };
   }
   state.days = days;
+  state.otherDays = Object.fromEntries(Object.entries(days).map(([k, d]) => [k, { ...d, tokens: { input: d.tokens.input * 40, output: Math.round(d.tokens.output / 3), cacheWrite: 0, cacheRead: Math.round(d.tokens.cacheRead / 6) },
+    activeSeconds: d.activeSeconds / 2, models: { 'gpt-6.1': { input: d.tokens.input * 40, output: Math.round(d.tokens.output / 3), cacheWrite: 0, cacheRead: Math.round(d.tokens.cacheRead / 6) } } }]));
   state.face = 'ojou_laugh';
   state.bubble = '本小姐驾到～ 点我看用量';
 }
@@ -690,6 +718,7 @@ app.whenReady().then(async () => {
   const ud = app.getPath('userData');
   history = new UsageHistory(path.join(ud, 'usage-history.jsonl'));
   indexer = new UsageIndexer(path.join(ud, 'usage-index.json'));
+  codexIndexer = new CodexIndexer(path.join(ud, 'codex-index.json'));
   tracker = new ProgressTracker();
   primaryWeb = new WebFetcher('persist:claude-main');
   secondaryWeb = new WebFetcher('persist:claude-second');
@@ -719,6 +748,9 @@ app.whenReady().then(async () => {
   setInterval(() => refreshSessions(true), 3000);
   setInterval(refreshUsage, 90e3);
   setInterval(refreshIndex, 180e3);
-  setInterval(() => { tickFace(); updateVisibility(); }, 2000);
+  setInterval(() => { tickFace(); tickChatter(); updateVisibility(); }, 2000);
+  duetLink = new DuetLink('claude', duetLines, canChat);
+  duetLink.start();
+  app.on('before-quit', () => duetLink.stop());
   pet.showInactive();
 });

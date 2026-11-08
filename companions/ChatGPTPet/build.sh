@@ -29,7 +29,7 @@ for arch in arm64 x86_64; do
     -target $arch-apple-macos14.0 \
     -framework AppKit -framework SwiftUI -framework ServiceManagement -framework Charts \
     Sources/*.swift ../Companion/*.swift \
-    ../../Sources/{V3Figure,Peers,PetHub,PetChrome}.swift -o "$TMP/GPTDragonPet-$arch"
+    ../../Sources/{V3Figure,Peers,PetHub,PetChrome,Banter}.swift -o "$TMP/GPTDragonPet-$arch"
 done
 lipo -create "$TMP/GPTDragonPet-arm64" "$TMP/GPTDragonPet-x86_64" -output "$APP/Contents/MacOS/GPTDragonPet"
 
@@ -42,6 +42,8 @@ fi
 if [[ -f "$ROOT/Assets/v3/face_smile.png" ]]; then        # v3 figure (ai-chan-sheets, CC BY-NC-SA 4.0)
   mkdir -p "$RES/v3" && cp "$ROOT"/Assets/v3/*.png "$ROOT/Assets/v3/SOURCE.txt" "$RES/v3/"
 fi
+
+cp ../../Assets/banter.json "$RES/banter.json"          # what she says (shared by all pets)
 
 echo "• 生成图标…"
 ICONSET="$TMP/AppIcon.iconset"

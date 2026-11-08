@@ -7,7 +7,9 @@ const path = require('path');
 const { CodexReader, CodexIndexer } = require('./lib/codex');
 const { UsageHistory } = require('./lib/history');
 const { Foreground } = require('./lib/foreground');
-const { dayKey } = require('./lib/indexer');
+const { dayKey, UsageIndexer } = require('./lib/indexer');
+const banter = require('./lib/banter');
+const { DuetLink } = require('./lib/duet');
 const { readPeers, codexLive, codexLogs, codexError, writePeer } = require('./lib/peers');
 
 const NAME = 'GPT龙娘';
@@ -31,7 +33,7 @@ const V3DIR = 'gpt-v3';
 
 const DEFAULTS = { scale: 1, opacity: 1, rotateSeconds: 12, chatter: true, onlyWithClaude: true,
   hideInFullscreen: false, alertWaiting: true, notifications: true, launchAtLogin: false, petPos: null,
-  figure: 'v3', peersExpanded: false, focusMinutes: 25, sitReminder: true, nightReminder: true };
+  figure: 'v3', peersExpanded: false, focusMinutes: 25, sitReminder: true, nightReminder: true, chatterSeconds: 30, petChat: true };
 let settingsFile, settings = { ...DEFAULTS };
 function loadSettings() {
   settingsFile = path.join(app.getPath('userData'), 'settings.json');
@@ -44,11 +46,11 @@ function saveSettings() { try { fs.writeFileSync(settingsFile, JSON.stringify(se
 const state = {
   usage: null, usageError: null, needsLogin: false, loadingUsage: false, lastUsageUpdate: null,
   secondary: null, secondaryError: null,
-  sessions: [], days: {}, indexing: false, indexProgress: 0, lastIndexed: null,
+  sessions: [], days: {}, otherDays: {}, indexing: false, indexProgress: 0, lastIndexed: null,
   face: 'smile', bubble: null, v3face: 'smile', hopAt: 0, shakeAt: 0,
   peers: [], codexError: null, focusEnd: 0, restEnd: 0,
 };
-let history, indexer, reader, foreground;
+let history, indexer, claudeIndexer, duetLink, reader, foreground;
 let pet, panel, dashboard, settingsWin, tray;
 let prevStatus = new Map();
 
@@ -71,7 +73,7 @@ function payload() {
     forecast7: history.forecast('live', false, state.usage?.sevenDay),
     spark: history.fiveHourSeries('live', state.usage?.fiveHour),
     petTask: taskText(), petPill: pillText(), alert: state.sessions.some((s) => s.isWaiting),
-    v3: true, hasV3: false, hasStickers: false, v3dir: V3DIR,
+    v3: true, hasV3: false, hasStickers: false, v3dir: V3DIR, ownSource: 'codex', dashSource: args.includes('--dash-all') ? 'all' : null,
     petName: NAME, hostName: 'ChatGPT', canAddAccount: false, sessionNoun: '线程',
     emptyTasks: '现在没有进行中的 Codex 线程，龙娘在晒太阳～',
     attrShort: 'v3 小人：GPT娘（白龙娘）· ai-chan-sheets · 角色设定 ZipZipPipe · CC BY-NC-SA 4.0',
@@ -127,21 +129,11 @@ function taskText() {
 
 // ------------------------------------------------------------------ expressions (v3 only)
 
-const LINES = {
-  breezy: ['额度还很充足，交给我吧～', '今天也要一起加油', '要不要再开一个任务？'],
-  calm: ['用了一些，还很从容', '我在旁边看着呢', '节奏刚刚好'],
-  strained: ['额度有点紧张了…', '要不要歇一会儿？', '我再检查一下'],
-  crushed: ['额度快见底了！', '呜…要用完了…', '让我缓一缓…'],
-  noData: ['还没读到 Codex 的用量', '用一次 Codex 我就知道啦'],
-  needsYou: ['有线程在等你回复哦', '快来看看嘛！'],
-  petted: ['诶嘿嘿…', '好痒～', '再摸摸也可以哦', '龙鳞要被摸亮啦'],
-  hop: ['嘿咻～', '飞起来啦！'],
-};
 const V3_POOLS = { idle: ['smile', 'giggle', 'smile', 'shy', 'giggle', 'calm'], working: ['smile', 'giggle', 'serious', 'smile', 'calm'],
   waiting: ['surprised', 'smile', 'shy'], strained: ['pout', 'smile', 'surprised'], crushed: ['aggrieved', 'pout', 'surprised'], sleepy: ['giggle', 'calm', 'shy'] };
 const V3_REACT = { taskDone: 'giggle', hop: 'giggle', petted: 'shy', oops: 'aggrieved', needsYou: 'surprised', taskStarted: 'serious',
   greet: 'smile', clicked: 'smile', care: 'smile', night: 'calm', farewell: 'smile' };
-let reactionUntil = 0, v3Next = 0, nextChatter = 0, lastNudge = 0, bubbleTimer = null;
+let reactionUntil = 0, v3Next = 0, nextChatter = Date.now() + 10e3, lastNudge = 0, bubbleTimer = null;
 
 function mood() { return state.usage ? ['noData', 'breezy', 'calm', 'strained', 'crushed'][level()] : 'noData'; }
 function v3State() {
@@ -171,7 +163,7 @@ function react(kind, seconds = 5, text = null) {
   reactionUntil = v3Next = Date.now() + seconds * 1000;
   if (text) say(text); else broadcast();
 }
-const pickLine = (k) => { const l = LINES[k] || []; return l[Math.floor(Math.random() * l.length)]; };
+const pickLine = (k) => banter.line('codex', k);
 function tickFace() {
   const now = Date.now();
   if (now < reactionUntil) return;
@@ -182,15 +174,34 @@ function tickFace() {
     notify(NAME, `「${w.name}」还在${w.waitingLabel}`);
     return;
   }
-  if (now >= v3Next) {
-    v3Rotate();
-    const rot = settings.rotateSeconds * 1000;
-    if (settings.chatter && !state.bubble && !state.focusEnd && now >= nextChatter) {
-      nextChatter = now + rot * 3 * (0.7 + Math.random() * 0.6);
-      if (Math.random() < 0.4) { const l = pickLine(mood()); if (l) { say(l, 4); return; } }
+  if (now >= v3Next) { v3Rotate(); broadcast(); }
+  // Says something on her own every `chatterSeconds` (±30%).
+  if (now >= nextChatter) {
+    nextChatter = now + settings.chatterSeconds * (0.7 + Math.random() * 0.6) * 1000;
+    if (settings.chatter && !state.bubble && !state.focusEnd) {
+      const moods = [mood()];
+      if (state.sessions.some((s) => s.isBusy)) moods.push('working');
+      if (state.sessions.some((s) => s.isWaiting)) moods.push('needsYou');
+      const h = new Date().getHours();
+      if (h >= 1 && h < 6) moods.push('night');
+      const u = state.usage, pc = (w) => (w ? `${Math.round(w.utilization)}%` : undefined);
+      const l = banter.chatter('codex', moods, { five: pc(u?.fiveHour), week: pc(u?.sevenDay) });
+      if (l) say(l, 4.5);
     }
-    broadcast();
   }
+}
+
+// Two pets chatting (lib/duet.js): pop up for the exchange and say my lines.
+function duetLines(lines, total) {
+  forceShowUntil = Date.now() + total * 1000;
+  updateVisibility();
+  for (const l of lines) setTimeout(() => { react('clicked', 3.4); say(l.text, 3.4); }, l.delay * 1000);
+  nextChatter = Date.now() + (total + 10) * 1000;
+}
+function canChat() {
+  const fg = foreground?.current || { known: false };
+  return settings.petChat && !state.focusEnd && !state.restEnd && powerMonitor.getSystemIdleTime() < 120
+    && (!fg.known || ['claude', 'chatgpt', 'codex'].includes(fg.name));
 }
 function notify(title, body) {
   if (!settings.notifications || petVisible() || !Notification.isSupported()) return;
@@ -258,6 +269,7 @@ async function refreshIndex() {
   state.indexing = true; broadcast();
   try {
     state.days = await indexer.run((p) => { state.indexProgress = p; broadcast(); });
+    state.otherDays = await claudeIndexer.run();         // Claude Code, for the dashboard's Claude / Codex / 合计 switch
     state.lastIndexed = Date.now();
   } finally { state.indexing = false; broadcast(); }
 }
@@ -449,6 +461,7 @@ function farewell() {
 }
 function setSetting(key, value) {
   if (!(key in DEFAULTS) || key === 'figure') return;
+  if (typeof DEFAULTS[key] === 'number' && typeof value === 'string') value = +value;
   settings[key] = value;
   saveSettings();
   if (key === 'scale' && pet) { pet.setBounds(petBounds()); pet.webContents.setZoomFactor(value); }
@@ -487,7 +500,7 @@ ipcMain.handle('act', async (_e, name, ...a) => {
     case 'openPeer': return shell.openExternal({ claude: 'https://claude.ai/settings/usage', grok: 'grokbot://', deepseek: 'https://platform.deepseek.com/usage' }[a[0]] || 'https://chatgpt.com/codex');
     case 'startFocus': return startFocus();
     case 'stopFocus': return stopFocus();
-    case 'resetSettings': for (const k of ['scale', 'opacity', 'rotateSeconds', 'chatter', 'onlyWithClaude', 'hideInFullscreen', 'alertWaiting', 'notifications', 'focusMinutes', 'sitReminder', 'nightReminder']) setSetting(k, DEFAULTS[k]); return;
+    case 'resetSettings': for (const k of ['scale', 'opacity', 'rotateSeconds', 'chatter', 'onlyWithClaude', 'hideInFullscreen', 'alertWaiting', 'notifications', 'focusMinutes', 'sitReminder', 'nightReminder', 'chatterSeconds', 'petChat']) setSetting(k, DEFAULTS[k]); return;
     case 'state': return payload();
     default: return null;
   }
@@ -538,6 +551,8 @@ function demoData() {
       sessions: Array.from({ length: Math.max(1, Math.round(3 * sc)) }, (_, k) => `s${i}-${k}`), models: { 'gpt-6.1': tk }, projects };
   }
   state.days = days;
+  state.otherDays = Object.fromEntries(Object.entries(days).map(([k, d]) => [k, { ...d, tokens: { input: Math.round(d.tokens.input / 100), output: d.tokens.output * 3, cacheWrite: d.tokens.cacheRead / 2, cacheRead: d.tokens.cacheRead * 8 },
+    activeSeconds: d.activeSeconds * 1.4, models: { 'claude-opus-5-5': { input: Math.round(d.tokens.input / 100), output: d.tokens.output * 3, cacheWrite: d.tokens.cacheRead / 2, cacheRead: d.tokens.cacheRead * 8 } } }]));
   state.v3face = 'smile';
   state.bubble = '我是 GPT龙娘～ 点我看额度';
 }
@@ -578,6 +593,7 @@ app.whenReady().then(async () => {
   const ud = app.getPath('userData');
   history = new UsageHistory(path.join(ud, 'usage-history.jsonl'));
   indexer = new CodexIndexer(path.join(ud, 'codex-index.json'));
+  claudeIndexer = new UsageIndexer(path.join(ud, 'claude-index.json'));
   reader = new CodexReader();
   if (DEMO) demoData();
 
@@ -607,5 +623,8 @@ app.whenReady().then(async () => {
   setInterval(refreshUsage, 60e3);
   setInterval(refreshIndex, 180e3);
   setInterval(() => { tickFace(); updateVisibility(); }, 2000);
+  duetLink = new DuetLink('codex', duetLines, canChat);
+  duetLink.start();
+  app.on('before-quit', () => duetLink.stop());
   pet.showInactive();
 });

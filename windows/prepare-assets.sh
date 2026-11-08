@@ -13,6 +13,7 @@ rm -rf assets/v3 && mkdir -p assets/v3 && cp "$ROOT"/Assets/v3/face_*.png "$ROOT
 sips -p 1024 1024 "$ROOT/Assets/daxiaojie/icon-starry.png" --out "$TMP/icon-square.png" >/dev/null
 sips -z 512 512 "$TMP/icon-square.png" --out build-res/icon.png >/dev/null
 sips -z 256 256 "$TMP/icon-square.png" --out assets/icon.png >/dev/null
+cp "$ROOT/Assets/banter.json" assets/banter.json            # what the pets say (same file as the Mac apps)
 # GPT龙娘 (GPTDragonPet, main-gpt.js): her v3 expressions and an icon cut from the smiling face.
 rm -rf assets/gpt-v3 && mkdir -p assets/gpt-v3 && cp "$ROOT"/companions/ChatGPTPet/Assets/v3/face_*.png "$ROOT/companions/ChatGPTPet/Assets/v3/SOURCE.txt" assets/gpt-v3/
 python3 - "$ROOT/companions/ChatGPTPet/Assets/v3/face_smile.png" <<'PY'

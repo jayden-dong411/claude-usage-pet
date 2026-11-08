@@ -23,10 +23,18 @@ struct PetInfo {
 
 struct HubEvent: Codable, Equatable {
     var id: Int
-    var kind: String            // focusDone | restDone | sit | night
+    var kind: String            // focusDone | restDone | sit | night | duet
     var text: String
     var note: String            // short text for the menu bar
     var at: Date
+    var lines: [DuetLine]? = nil    // duet: who says what, when
+}
+
+/// One line of a two-pet exchange, `delay` seconds after it starts.
+struct DuetLine: Codable, Equatable {
+    var pet: String
+    var text: String
+    var delay: Double
 }
 
 struct HubState: Codable, Equatable {
@@ -45,6 +53,10 @@ final class HubSettings: ObservableObject {
     @Published var sitReminder: Bool { didSet { d.set(sitReminder, forKey: "sitReminder") } }
     @Published var nightReminder: Bool { didSet { d.set(nightReminder, forKey: "nightReminder") } }
     @Published var menuBarIcon: Bool { didSet { d.set(menuBarIcon, forKey: "menuBarIcon") } }
+    /// Average seconds between two things a pet says on her own.
+    @Published var chatterSeconds: Double { didSet { d.set(chatterSeconds, forKey: "chatterSeconds") } }
+    /// Pets now and then talk to each other (the other one pops up for a moment).
+    @Published var petChat: Bool { didSet { d.set(petChat, forKey: "petChat") } }
 
     private init() {
         let d = UserDefaults(suiteName: "local.aipets.shared") ?? .standard
@@ -52,13 +64,18 @@ final class HubSettings: ObservableObject {
         sitReminder = d.object(forKey: "sitReminder") == nil ? true : d.bool(forKey: "sitReminder")
         nightReminder = d.object(forKey: "nightReminder") == nil ? true : d.bool(forKey: "nightReminder")
         menuBarIcon = d.object(forKey: "menuBarIcon") == nil ? true : d.bool(forKey: "menuBarIcon")
+        chatterSeconds = d.object(forKey: "chatterSeconds") == nil ? 30 : d.double(forKey: "chatterSeconds")
+        petChat = d.object(forKey: "petChat") == nil ? true : d.bool(forKey: "petChat")
     }
 
     /// Picks up changes made in another pet's settings window.
     func reload() {
         let fm = d.object(forKey: "focusMinutes") == nil ? 25 : d.double(forKey: "focusMinutes")
         if fm != focusMinutes { focusMinutes = fm }
-        for (key, path) in [("sitReminder", \HubSettings.sitReminder), ("nightReminder", \.nightReminder), ("menuBarIcon", \.menuBarIcon)] {
+        let cs = d.object(forKey: "chatterSeconds") == nil ? 30 : d.double(forKey: "chatterSeconds")
+        if cs != chatterSeconds { chatterSeconds = cs }
+        for (key, path) in [("sitReminder", \HubSettings.sitReminder), ("nightReminder", \.nightReminder), ("menuBarIcon", \.menuBarIcon),
+                            ("petChat", \.petChat)] {
             let v = d.object(forKey: key) == nil ? true : d.bool(forKey: key)
             if self[keyPath: path] != v { self[keyPath: path] = v }
         }
@@ -74,6 +91,12 @@ struct HubSettingsSection: View {
             Toggle("在菜单栏显示各家额度（四只桌宠共用一个）", isOn: $s.menuBarIcon)
             Toggle("连续使用 2 小时提醒起来活动（之后每 30 分钟）", isOn: $s.sitReminder)
             Toggle("凌晨 0–5 点还在用时提醒睡觉", isOn: $s.nightReminder)
+            Picker("说话频率", selection: $s.chatterSeconds) {
+                Text("安静（约 90 秒一句）").tag(90.0)
+                Text("适中（约 30 秒一句）").tag(30.0)
+                Text("话痨（约 15 秒一句）").tag(15.0)
+            }
+            Toggle("桌宠之间偶尔聊天（会把另一只叫出来一会儿）", isOn: $s.petChat)
             LabeledContent("专注时长") {
                 HStack {
                     Slider(value: $s.focusMinutes, in: 10...60, step: 5)
@@ -83,7 +106,7 @@ struct HubSettingsSection: View {
         } header: {
             Text("四只桌宠共用")
         } footer: {
-            Text("专注番茄钟和提醒在四只桌宠之间同步：哪只桌宠在前台就由谁提醒你。")
+            Text("专注番茄钟、提醒和说话频率在四只桌宠之间同步：哪只桌宠在前台就由谁提醒你。「偶尔说句话」在各自的设置里开关。")
                 .font(.caption).foregroundStyle(.secondary)
         }
     }
@@ -101,6 +124,8 @@ protocol PetHubClient: AnyObject {
     func hubStatusIcon() -> NSImage?
     /// Right-click menu of the menu-bar item while this pet leads.
     func hubStatusMenu() -> NSMenu
+    /// Two pets talk: stay visible for `total` seconds and say `lines` at their delays.
+    func hubDuet(_ lines: [DuetLine], total: Double)
 }
 
 @MainActor
@@ -134,6 +159,7 @@ final class PetHub: NSObject {
     private var lastActive = Date.distantPast
     private var lastNight = Date.distantPast
     private var tickCount = 0
+    private var nextDuet = Date().addingTimeInterval(.random(in: 150...300))
 
     var focusing: Bool { (state.focusEnd ?? .distantPast) > Date() }
     var resting: Bool { (state.restEnd ?? .distantPast) > Date() }
@@ -251,10 +277,74 @@ final class PetHub: NSObject {
         fileStamp = (try? Self.fileURL.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate)
     }
 
-    private func emit(_ kind: String, _ text: String, note: String) {
+    private func emit(_ kind: String, _ text: String, note: String, lines: [DuetLine]? = nil) {
         load()
-        state.event = HubEvent(id: (state.event?.id ?? 0) + 1, kind: kind, text: text, note: note, at: Date())
+        state.event = HubEvent(id: (state.event?.id ?? 0) + 1, kind: kind, text: text, note: note, at: Date(), lines: lines)
         save()
+    }
+
+    // MARK: Duets (leader only)
+
+    /// Highest limit in use for a pet's provider, if known.
+    private func usagePercent(_ id: String) -> Double? {
+        let u: PeerUsage?
+        switch id {
+        case "claude": u = PeerStore.read("claude", maxAge: 1800)
+        case "codex": u = PeerStore.read("codex", maxAge: 1800)
+        case "grok": u = GrokBotPeer.read()
+        default: u = nil
+        }
+        return u?.windows.map(\.utilization).max()
+    }
+
+    private func condition(_ when: String, _ a: String, _ b: String) -> Bool {
+        let pa = usagePercent(a), pb = usagePercent(b)
+        let h = Calendar.current.component(.hour, from: Date()), wd = Calendar.current.component(.weekday, from: Date())
+        switch when {
+        case "any": return true
+        case "A_high": return (pa ?? 0) >= 75
+        case "B_high": return (pb ?? 0) >= 75
+        case "A_low": return (pa ?? 100) <= 25
+        case "B_low": return (pb ?? 100) <= 25
+        case "both_high": return (pa ?? 0) >= 75 && (pb ?? 0) >= 75
+        case "both_low": return (pa ?? 100) <= 25 && (pb ?? 100) <= 25
+        case "night": return h >= 23 || h < 5
+        case "morning": return (6..<11).contains(h)
+        case "friday": return wd == 6
+        case "weekend": return wd == 1 || wd == 7
+        default: return false
+        }
+    }
+
+    /// Starts a short exchange between the pet in front (or any) and another running pet.
+    func startDuet() {
+        let running = Self.registry.filter(Self.isRunning).map(\.id)
+        guard running.count >= 2 else { return }
+        let front = displayerID
+        let a = running.contains(front) ? front : running.randomElement()!
+        guard let b = running.filter({ $0 != a }).randomElement() else { return }
+        var options: [(BanterDuet, String, String)] = []
+        for d in Banter.duets {
+            if let p = d.pair {
+                guard p.count == 2, Set(p) == Set([a, b]) else { continue }
+                if condition(d.when, p[0], p[1]) { options += [(d, p[0], p[1]), (d, p[0], p[1])] }   // pair lines count double
+            } else if condition(d.when, a, b) {
+                // Condition-specific lines are much more fun when they apply.
+                options += Array(repeating: (d, a, b), count: d.when == "any" ? 1 : 3)
+            }
+        }
+        guard let (d, ra, rb) = options.randomElement() else { return }
+        let pct = { (id: String) in self.usagePercent(id).map { "\(Int($0.rounded()))%" } }
+        var vars = ["A": Banter.name(ra), "B": Banter.name(rb)]
+        vars["Apct"] = pct(ra); vars["Bpct"] = pct(rb)
+        var t = 0.0
+        var lines: [DuetLine] = []
+        for l in d.lines {
+            guard let text = Banter.fill(l.text, vars) else { return }
+            lines.append(DuetLine(pet: l.role == "A" ? ra : rb, text: text, delay: t))
+            t += 3.6
+        }
+        emit("duet", "", note: "", lines: lines)
     }
 
     // MARK: Tick
@@ -266,9 +356,19 @@ final class PetHub: NSObject {
         if stamp != fileStamp { load() }
         if tickCount % 5 == 0 { settings.reload() }
         if isLeader { lead() }
+        // Debug: `defaults write local.aipets.shared duetNow -bool YES` starts a duet right away.
+        if isLeader, settings.d.bool(forKey: "duetNow") { settings.d.removeObject(forKey: "duetNow"); startDuet() }
         if let e = state.event, e.id > lastSeenEvent {
             lastSeenEvent = e.id
-            if Date().timeIntervalSince(e.at) < 30 && displayerID == me { client?.hubShowReminder(e) }
+            if Date().timeIntervalSince(e.at) < 30 {
+                if e.kind == "duet" {
+                    let mine = (e.lines ?? []).filter { $0.pet == me }
+                    let total = ((e.lines ?? []).map(\.delay).max() ?? 0) + 4
+                    if !mine.isEmpty { client?.hubDuet(mine, total: total) }
+                } else if displayerID == me {
+                    client?.hubShowReminder(e)
+                }
+            }
         }
         if state != before || focusing || resting { client?.hubStateChanged() }
         updateStatusItem()
@@ -301,6 +401,12 @@ final class PetHub: NSObject {
             }
         }
         guard tickCount % 2 == 0 else { return }
+        // Now and then two pets chat, while you are around and not focusing.
+        let idleNow = CGEventSource.secondsSinceLastEventType(.combinedSessionState, eventType: CGEventType(rawValue: ~0)!)
+        if now >= nextDuet {
+            nextDuet = now.addingTimeInterval(.random(in: 420...900))
+            if settings.petChat, Self.aiAppInFront, idleNow < 120, !focusing, !resting { startDuet() }
+        }
         // Continuous use: reset by 5 min away from the keyboard or 10 min without an AI app in front.
         let idle = CGEventSource.secondsSinceLastEventType(.combinedSessionState, eventType: CGEventType(rawValue: ~0)!)
         if idle < 120 && Self.aiAppInFront { lastActive = now }
@@ -464,6 +570,7 @@ struct HubOverview: View {
         }
         .padding(16)
         .frame(width: 360)
+        .fitsScreen()
         .onReceive(tick) { now = $0 }
     }
 }

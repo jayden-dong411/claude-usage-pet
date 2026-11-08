@@ -41,6 +41,11 @@ enum Spec {
 
     static func hasUsage(_ m: AppModel) -> Bool { m.usage != nil }
 
+    static func banterVars(_ m: AppModel) -> [String: String] {
+        guard let u = m.usage else { return [:] }
+        return ["balance": u.money(u.balance), "today": u.money(u.today)]
+    }
+
     static func panel(_ m: AppModel, _ a: PanelActions) -> AnyView {
         AnyView(PanelView(model: m, stats: stats, openClaude: a.openSession, openDashboard: a.openDashboard,
                           openSettings: a.openSettings, quit: a.quit))

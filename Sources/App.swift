@@ -43,6 +43,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, NSW
     private var face: String?
     private var reactionUntil = Date.distantPast
     private var nextRotate = Date.distantPast
+    private var nextChatter = Date().addingTimeInterval(10)
     private var moodKey = ""
     private var faceTimer: Timer?
     private var lastNudge = Date.distantPast
@@ -155,6 +156,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, NSW
                     self.setFace("ojou_laugh")
                     self.say("本小姐驾到～ 点我看用量")
                 }
+                if let i = args.firstIndex(of: "--say"), i + 1 < args.count { self?.say(args[i + 1]) }   // bubble layout check
                 self?.writeSnapshots(to: dir)
                 NSApp.terminate(nil)
             }
@@ -277,7 +279,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, NSW
         petView.onDoubleClick = { [weak self] in self?.hop() }
         petView.onPet = { [weak self] in
             guard let self else { return }
-            self.react(.petted, seconds: 4, say: Mood.petted.lines.randomElement())
+            self.react(.petted, seconds: 4, say: Banter.line("claude", "petted") ?? Mood.petted.lines.randomElement())
         }
         petView.petRect = { [weak self] in self?.imgRect ?? .zero }
         petView.onDragStart = { [weak self] in self?.popover?.performClose(nil) }
@@ -541,14 +543,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, NSW
             v3?.setState(main.v3State)
             model.face = face ?? "hi"
             moodKey = key
-            if now >= nextRotate {
-                // Here the interval only paces chatter (the figure swaps expressions by itself).
-                let base = max(settings.rotateSeconds, 30)
-                nextRotate = now.addingTimeInterval(.random(in: base * 1.4...base * 2.6))
-                if settings.chatter, !focusing, !moodChanged, bubble.isHidden, let line = moods.randomElement()?.lines.randomElement() {
-                    say(line, seconds: 4)
-                }
-            }
+            chatter(moods, now)
             return
         }
         guard moodChanged || now >= nextRotate || face == nil else { return }
@@ -556,10 +551,26 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, NSW
         setFace(Faces.pick(from: moods, avoiding: face))
         let base = settings.rotateSeconds
         nextRotate = now.addingTimeInterval(.random(in: base * 0.7...base * 1.3))
-        if settings.chatter, !focusing, !moodChanged, bubble.isHidden, Int.random(in: 0..<4) == 0,
-           let line = moods.randomElement()?.lines.randomElement() {
-            say(line, seconds: 4)
+        chatter(moods, now)
+    }
+
+    /// Says something on her own every `chatterSeconds` (shared setting, ±30%).
+    private func chatter(_ moods: [Mood], _ now: Date) {
+        guard now >= nextChatter else { return }
+        let base = hub.settings.chatterSeconds
+        nextChatter = now.addingTimeInterval(.random(in: base * 0.7...base * 1.3))
+        guard settings.chatter, !focusing, bubble.isHidden else { return }
+        if let line = Banter.chatter("claude", moods: moods.map(\.rawValue), vars: banterVars())
+            ?? moods.randomElement()?.lines.randomElement() {
+            say(line, seconds: 4.5)
         }
+    }
+
+    private func banterVars() -> [String: String] {
+        var v: [String: String] = [:]
+        if let w = model.usage?.fiveHour { v["five"] = "\(Int(w.utilization.rounded()))%" }
+        if let w = model.usage?.sevenDay { v["week"] = "\(Int(w.utilization.rounded()))%" }
+        return v
     }
 
     /// Shows a face from `mood` for a few seconds, then goes back to rotating.
@@ -584,6 +595,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, NSW
 
     private func say(_ text: String, seconds: Double = 5) {
         bubble.set(text, centerX: baseSize.width / 2, y: imgRect.maxY - (v3Mode ? 2 : animated ? 6 : 18), maxWidth: baseSize.width - 8, radius: 12)
+        bubble.keepBelow(baseSize.height - 2)
         if let v3 { v3.show(v3.face, seconds: seconds) }
         bubble.isHidden = false
         bubbleHide?.cancel()
@@ -758,7 +770,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, NSW
                 self?.imageView.animator().setFrameOrigin(home.origin)
             })
         })
-        if Int.random(in: 0..<3) == 0, let line = Mood.hop.lines.randomElement() { say(line, seconds: 2.5) }
+        if Int.random(in: 0..<2) == 0, let line = Banter.line("claude", "hop") ?? Mood.hop.lines.randomElement() { say(line, seconds: 2.5) }
     }
 
     // MARK: Shared hub (menu bar, focus timer, reminders)
@@ -773,6 +785,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, NSW
         updateVisibility()
         react(mood, seconds: 12, say: nil)
         say(e.text, seconds: 12)
+    }
+
+    func hubDuet(_ lines: [DuetLine], total: Double) {
+        forceShowUntil = Date().addingTimeInterval(total)
+        updateVisibility()
+        for l in lines {
+            DispatchQueue.main.asyncAfter(deadline: .now() + l.delay) { [weak self] in
+                guard let self else { return }
+                self.react(.clicked, seconds: 3.4)
+                self.say(l.text, seconds: 3.4)
+            }
+        }
+        nextChatter = Date().addingTimeInterval(total + 10)
     }
 
     func hubShowPanel() {

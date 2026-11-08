@@ -35,7 +35,7 @@
 3. 大小姐会出现在屏幕右下角，任务栏右下角的托盘里也有她的图标（右键托盘图标可以打开面板、设置或退出）。
 4. 用量会依次尝试：读取 Claude 桌面版的登录 → 读取 Claude Code 的登录（`%USERPROFILE%\.claude\.credentials.json`）→ 都不行时，在面板里点 **「登录 claude.ai 查看用量」** 单独登录一次（之后会记住）。
 
-> Windows 版也有：v3 小人、「其他额度」折叠区（Codex 实时额度、Grok Bot、DeepSeek 余额）、托盘悬停显示 5 小时额度、专注番茄钟、久坐 / 熬夜提醒、双击跳一下和摸头。另外支持 **系统通知**——大小姐隐藏时（Claude 不在前台），任务完成、需要你批准或到点提醒都会弹出 Windows 通知。暂不支持：可动小人、用量统计里的 Codex / 合计切换。
+> Windows 版也有：v3 小人、「其他额度」折叠区（Codex 实时额度、Grok Bot、DeepSeek 余额）、托盘悬停显示 5 小时额度、专注番茄钟、久坐 / 熬夜提醒、双击跳一下和摸头、说话频率和两只桌宠之间的聊天、用量统计里的 Claude / Codex / 合计切换。另外支持 **系统通知**——大小姐隐藏时（Claude 不在前台），任务完成、需要你批准或到点提醒都会弹出 Windows 通知。暂不支持：可动小人。
 
 **GPT龙娘（Windows）**：安装 `GPTDragonPet-Setup-…-win-x64.exe` 后，她默认站在大小姐左边，只在 ChatGPT / Codex 窗口在前台时出现。额度用这台电脑上 Codex 的登录（`%USERPROFILE%\.codex\auth.json`，只读）实时查询 ChatGPT 账号的 5 小时 / 每周额度，查不到时退回本机 Codex 日志；面板里有进行中的 Codex 线程（点开会跳到 ChatGPT 里的那个线程）、Codex 用量统计，「其他额度」里能看到 Claude（由 Windows 版大小姐共享过来）、Grok Bot 和 DeepSeek。形象是 v3 小人（GPT龙娘动画素材没有开放授权，不随安装包分发）。
 
@@ -99,7 +99,7 @@
 - **今天**：使用时长、会话数、总 token、回复数、输入/输出、缓存读写。
 - **最近 7 / 14 / 30 天**：每天的 token（可切换 全部 / 输入+输出 / 缓存写入 / 缓存读取）和使用时长，悬停看数值。
 - 按模型、按项目的用量排行。
-- **Claude / Codex / 合计** 切换（Mac 版）：合计模式下柱状图按来源叠加显示（Claude 橙色、Codex 紫色）。
+- **Claude / Codex / 合计** 切换（Mac 版大小姐；Windows 版大小姐和 GPT龙娘都有）：合计模式下柱状图按来源叠加显示（Claude 橙色、Codex 紫色）。
 
 <img src="docs/screenshots/dashboard-all.png" width="600" alt="合计模式（演示数据）">
 
@@ -107,7 +107,14 @@
 
 <img src="docs/screenshots/settings.png" width="360" alt="设置">
 
-大小、透明度、表情轮换间隔、形象、是否偶尔说话、只在 Claude 前台时显示、Claude 全屏时隐藏、会话等你时提醒；以及菜单栏总览、久坐提醒、熬夜提醒、专注时长（这四项和其他桌宠共用）。
+大小、透明度、表情轮换间隔、形象、是否偶尔说话、只在 Claude 前台时显示、Claude 全屏时隐藏、会话等你时提醒；以及菜单栏总览、久坐提醒、熬夜提醒、专注时长、说话频率、桌宠之间聊天（这几项和其他桌宠共用）。
+
+### 说话和聊天
+
+- 每只桌宠有自己的性格和台词（大小姐傲娇、龙娘温柔、Grok娘吐槽、DeepSeek娘精打细算），一共五百多句：按当前状态（额度充足 / 紧张 / 见底、有任务在跑、会话等你、深夜）、时间段（早上、午饭、下午茶、晚上、快半夜）、星期（周一、周五、周末）挑，偶尔插一句冷知识或玩笑，会带上实时的额度数字；说过的话要隔十几句才会再说。
+- **说话频率**：安静（约 90 秒一句）/ 适中（约 30 秒，默认）/ 话痨（约 15 秒）。
+- **桌宠之间聊天**：开着两只以上桌宠时，每隔 7–15 分钟（你在用电脑、没在专注时）会挑两只聊几句，另一只会出来一会儿再回去；会看彼此的额度说话，比如一只额度快用完时另一只说「交给我吧」。不想被打扰可以在设置里关掉。
+- 台词都在 `Assets/banter.json` 里，Mac 版和 Windows 版共用，想加自己的台词直接改这个文件再重新构建即可。
 
 ### v3 小人（Mac 版）
 
@@ -240,6 +247,7 @@ npm run dist:win:gpt            # 打包 GPT龙娘（配置在 build-gpt.json）
 | `lib/foreground.js` | 用常驻 PowerShell 检测前台程序和是否全屏 |
 | `lib/sessions.js` / `lib/indexer.js` / `lib/history.js` | 会话与步骤进度、每日统计、用量预测（和 Mac 版同一套规则） |
 | `lib/expressions.js` | 表情分组（由 `gen-expressions.py` 从 `Sources/Expressions.swift` 生成） |
+| `lib/banter.js` / `lib/duet.js` | 台词（读 `Assets/banter.json`）；两只 Windows 桌宠之间的聊天（通过 `%APPDATA%\AIPets` 里的文件） |
 | `lib/peers.js` | 「其他额度」：Codex 实时额度、Grok Bot、DeepSeek 余额；两只桌宠通过 `%APPDATA%\AIPets\*.json` 互相共享额度 |
 | `renderer/` | 桌宠、面板、用量统计、设置四个界面 |
 
@@ -264,11 +272,13 @@ Sources/
   V3Figure.swift       v3 小人：按状态切换 8 种表情
   Peers.swift          Codex / Grok Bot / DeepSeek 的额度读取和「其他额度」卡片
   PetHub.swift         菜单栏总览、番茄钟和提醒（多只桌宠之间同步）
-  PetChrome.swift      桌宠窗口里的视图（点击、双击、摸头、拖动）
+  PetChrome.swift      桌宠窗口里的视图（点击、双击、摸头、拖动），面板超出屏幕时滚动
+  Banter.swift         读取台词库，按状态 / 时间挑一句；桌宠之间的对话
 Tools/strip_outline.swift   构建时去掉贴图白边
 Tools/make_v3_assets.py     从 ai-chan-sheets 设定图切出 v3 表情并去掉白底
 Assets/daxiaojie/head/      80 张表情（CC BY-NC-SA 4.0）
 Assets/v3/                  v3 小人的 8 张表情（CC BY-NC-SA 4.0）
+Assets/banter.json          四只桌宠的台词和对话（Mac 和 Windows 共用）
 ```
 
 ---

@@ -37,6 +37,11 @@ enum Spec {
 
     static func hasUsage(_ m: AppModel) -> Bool { m.usage != nil }
 
+    static func banterVars(_ m: AppModel) -> [String: String] {
+        guard let w = m.usage?.windows.first else { return [:] }
+        return ["week": "\(Int(w.utilization.rounded()))%"]
+    }
+
     static func panel(_ m: AppModel, _ a: PanelActions) -> AnyView {
         AnyView(PanelView(model: m, openClaude: a.openSession, openSettings: a.openSettings, quit: a.quit))
     }
