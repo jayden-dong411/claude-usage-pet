@@ -76,7 +76,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, NSW
     private var v3: V3Figure?
     private var forceV3 = false                 // `--snapshot … --v3`
     private var v3Mode: Bool { (Spec.prefersV3 || forceV3 || !Spec.hasSprite) && V3Assets.available }
-    private var v3Home: NSRect { NSRect(x: 22, y: imgY, width: 176, height: 188) }
+    private var v3Home: NSRect { NSRect(x: 4, y: imgY, width: 212, height: 188) }   // wide enough for the outpainted hair
     private var statusIcons: [ObjectIdentifier: NSImage] = [:]
 
     // Layout in base units (scaled by Settings.scale), top-down: bubble, figure, tasks, usage pill.

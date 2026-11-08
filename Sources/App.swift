@@ -74,7 +74,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, NSW
         v3Mode ? NSSize(width: 220, height: 336) : animated ? NSSize(width: 220, height: 320) : NSSize(width: 220, height: 300)
     }
     private var imgRect: NSRect {
-        v3Mode ? NSRect(x: 26, y: 116, width: 168, height: 188)
+        v3Mode ? NSRect(x: 4, y: 116, width: 212, height: 188)        // wide enough for the outpainted hair
             : animated ? NSRect(x: 35, y: 122, width: 150, height: 162) : NSRect(x: 40, y: 116, width: 140, height: 140)
     }
     private var belowHead: CGFloat { imgRect.minY + (animated ? 6 : 4) }

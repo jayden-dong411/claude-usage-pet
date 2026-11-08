@@ -1,7 +1,7 @@
 {
   "name": "claude-usage-pet",
   "productName": "ClaudeUsagePet",
-  "version": "1.4.1",
+  "version": "1.4.2",
   "description": "Claude大小姐 · Claude 用量桌宠（Windows 版）",
   "main": "main.js",
   "author": "jayden-dong411",

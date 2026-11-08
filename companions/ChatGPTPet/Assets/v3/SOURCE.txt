@@ -1,3 +1,4 @@
 GPT娘（白龙娘·成年） — v3 figure cut from github.com/lmy414/ai-chan-sheets (02_GPT娘_白龙娘).
 Character design: ZipZipPipe (space.bilibili.com/4168597). Sheets: lmy414, CC BY-NC-SA 4.0.
 Background removed and resized for a desktop pet. Non-commercial use only.
+The hair and clothes cut off at the left and right edges were extended by AI outpainting (Codex image generation, 2026-11); every pixel of the original crop is unchanged.

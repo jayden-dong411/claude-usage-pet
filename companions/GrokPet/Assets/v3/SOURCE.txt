@@ -1,3 +1,4 @@
 Grok娘（xAI） — v3 figure cut from github.com/lmy414/ai-chan-sheets (09_Grok娘_xAI).
 Character design: ZipZipPipe (space.bilibili.com/4168597). Sheets: lmy414, CC BY-NC-SA 4.0.
 Background removed and resized for a desktop pet. Non-commercial use only.
+The hair and clothes cut off at the left and right edges were extended by AI outpainting (Codex image generation, 2026-11); every pixel of the original crop is unchanged.
