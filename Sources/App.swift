@@ -542,7 +542,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, NSW
             model.face = face ?? "hi"
             moodKey = key
             if now >= nextRotate {
-                let base = settings.rotateSeconds
+                // Here the interval only paces chatter (the figure swaps expressions by itself).
+                let base = max(settings.rotateSeconds, 30)
                 nextRotate = now.addingTimeInterval(.random(in: base * 1.4...base * 2.6))
                 if settings.chatter, !focusing, !moodChanged, bubble.isHidden, let line = moods.randomElement()?.lines.randomElement() {
                     say(line, seconds: 4)

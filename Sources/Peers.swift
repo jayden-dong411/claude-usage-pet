@@ -5,7 +5,10 @@ import SwiftUI
 // others':
 // - Claude limits can only be fetched by the Claude pet (it holds the claude.ai login), so it writes
 //   ~/Library/Application Support/AIPets/claude.json for the others.
-// - Codex limits come straight from ~/.codex/sessions (CodexPeer.read), with codex.json as a fallback.
+// - Codex limits: live from the ChatGPT account (CodexLive, using the Codex CLI login in
+//   ~/.codex/auth.json — the user approved this on 2026-11-08), shared via codex.json; the local
+//   ~/.codex/sessions logs (CodexPeer.read) are only a fallback, since they miss usage from the
+//   web, phone or cloud tasks and stop updating when Codex isn't used on this Mac.
 // - Grok Bot's weekly usage comes from the Grok Bot desktop app's own cache (GrokBotPeer.read) — the
 //   Grok Bot app, not the Grok Build CLI.
 // - DeepSeek has no rate limits but a prepaid balance, which DeepSeek Harness keeps in
@@ -64,14 +67,101 @@ enum PeerStore {
     static func peers(excluding me: String) -> [PeerUsage] {
         var out: [PeerUsage] = []
         if me != "claude", let c = read("claude") { out.append(c) }
-        if me != "codex", let c = CodexPeer.read() ?? read("codex") { out.append(c) }
+        if me != "codex", let c = read("codex", maxAge: 300)
+            ?? CodexLive.peer().map({ u -> PeerUsage in write(u); return u })
+            ?? CodexPeer.read() ?? read("codex") {
+            out.append(c)
+        }
         if me != "grok", let g = GrokBotPeer.read() { out.append(g) }
         if me != "deepseek", let d = DeepSeekPeer.read() { out.append(d) }
         return out
     }
 }
 
-// MARK: - Codex limits (latest token_count event in recent rollout logs)
+// MARK: - Codex limits, live from the ChatGPT account
+
+/// The same request the Codex CLI makes for `/status`: GET chatgpt.com/backend-api/wham/usage with the
+/// CLI's own login (~/.codex/auth.json, read-only; Codex refreshes the token itself when it runs).
+enum CodexLive {
+    struct Limits {
+        var fiveHour: Double
+        var fiveReset: Date?
+        var week: Double
+        var weekReset: Date?
+        var plan: String?
+        var at: Date
+    }
+
+    private static let lock = NSLock()
+    nonisolated(unsafe) private static var cache: (Date, Limits?) = (.distantPast, nil)
+    nonisolated(unsafe) private static var lastError: String?
+
+    /// Why the last request failed (nil after a success).
+    static var error: String? { lock.lock(); defer { lock.unlock() }; return lastError }
+
+    /// Blocking; call off the main thread. Results are reused for `maxAge` seconds.
+    static func fetch(maxAge: TimeInterval = 90) -> Limits? {
+        lock.lock()
+        if Date().timeIntervalSince(cache.0) < maxAge { let c = cache.1; lock.unlock(); return c }
+        lock.unlock()
+        let r = request()
+        lock.lock()
+        cache = (Date(), r)
+        lock.unlock()
+        return r
+    }
+
+    private static func request() -> Limits? {
+        func fail(_ s: String) -> Limits? { lock.lock(); lastError = s; lock.unlock(); return nil }
+        let authURL = FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent(".codex/auth.json")
+        guard let d = try? Data(contentsOf: authURL),
+              let o = try? JSONSerialization.jsonObject(with: d) as? [String: Any],
+              let t = o["tokens"] as? [String: Any], let token = t["access_token"] as? String, !token.isEmpty
+        else { return fail("没有找到 Codex 登录（~/.codex/auth.json）") }
+        var req = URLRequest(url: URL(string: "https://chatgpt.com/backend-api/wham/usage")!, timeoutInterval: 20)
+        req.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        if let acct = t["account_id"] as? String { req.setValue(acct, forHTTPHeaderField: "ChatGPT-Account-Id") }
+        req.setValue("application/json", forHTTPHeaderField: "Accept")
+        req.setValue("codex_cli_rs", forHTTPHeaderField: "User-Agent")
+        let sem = DispatchSemaphore(value: 0)
+        var body: Data?, status = 0
+        URLSession.shared.dataTask(with: req) { data, resp, _ in
+            body = data
+            status = (resp as? HTTPURLResponse)?.statusCode ?? 0
+            sem.signal()
+        }.resume()
+        _ = sem.wait(timeout: .now() + 25)
+        guard status == 200, let body, let j = try? JSONSerialization.jsonObject(with: body) as? [String: Any],
+              let rl = j["rate_limit"] as? [String: Any] else {
+            return fail(status == 401 || status == 403 ? "Codex 登录已过期，打开一次 ChatGPT 里的 Codex 就会自动续上"
+                        : status == 0 ? "连不上 chatgpt.com" : "查询失败（HTTP \(status)）")
+        }
+        func win(_ any: Any?) -> (Double, Date?) {
+            guard let w = any as? [String: Any] else { return (0, nil) }
+            let used = (w["used_percent"] as? NSNumber)?.doubleValue ?? 0
+            let reset = (w["reset_at"] as? NSNumber).map { Date(timeIntervalSince1970: $0.doubleValue) }
+            let after = (w["reset_after_seconds"] as? NSNumber)?.doubleValue ?? 0
+            let length = (w["limit_window_seconds"] as? NSNumber)?.doubleValue ?? 0
+            // An unused window reports a reset a full window away: it hasn't started yet.
+            if used == 0 && length > 0 && after >= length - 60 { return (0, nil) }
+            return (max(0, used), reset)
+        }
+        let f = win(rl["primary_window"]), w = win(rl["secondary_window"])
+        let plan = (j["plan_type"] as? String).map { $0.prefix(1).uppercased() + $0.dropFirst() }
+        lock.lock(); lastError = nil; lock.unlock()
+        return Limits(fiveHour: f.0, fiveReset: f.1, week: w.0, weekReset: w.1, plan: plan, at: Date())
+    }
+
+    static func peer() -> PeerUsage? {
+        guard let l = fetch() else { return nil }
+        return PeerUsage(provider: "codex", title: "ChatGPT · Codex", plan: l.plan,
+                         windows: [PeerWindow(label: "5 小时", utilization: l.fiveHour, resetsAt: l.fiveReset),
+                                   PeerWindow(label: "每周", utilization: l.week, resetsAt: l.weekReset)],
+                         observedAt: l.at)
+    }
+}
+
+// MARK: - Codex limits from the local logs (fallback: latest token_count event in recent rollouts)
 
 enum CodexPeer {
     private static let root = FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent(".codex/sessions")

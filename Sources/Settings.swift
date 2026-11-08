@@ -51,7 +51,7 @@ final class Settings: ObservableObject {
         func flag(_ k: String, _ def: Bool) -> Bool { d.object(forKey: k) == nil ? def : d.bool(forKey: k) }
         scale = num("scale", 1.0)
         opacity = num("opacity", 1.0)
-        rotateSeconds = num("rotateSeconds", 35)
+        rotateSeconds = num("rotateSeconds", 12)
         onlyWithClaude = flag("onlyWithClaude", true)
         hideInFullscreen = flag("hideInFullscreen", false)
         chatter = flag("chatter", true)
@@ -65,7 +65,7 @@ final class Settings: ObservableObject {
     }
 
     func reset() {
-        scale = 1.0; opacity = 1.0; rotateSeconds = 35
+        scale = 1.0; opacity = 1.0; rotateSeconds = 12
         onlyWithClaude = true; hideInFullscreen = false; chatter = true; alertWaiting = true
     }
 }
@@ -90,7 +90,7 @@ struct SettingsView: View {
                 }
                 LabeledContent("表情轮换间隔") {
                     HStack {
-                        Slider(value: $s.rotateSeconds, in: 10...180, step: 5)
+                        Slider(value: $s.rotateSeconds, in: 5...120, step: 1)
                         Text("约 \(Int(s.rotateSeconds)) 秒").monospacedDigit().frame(width: 64, alignment: .trailing)
                     }
                 }

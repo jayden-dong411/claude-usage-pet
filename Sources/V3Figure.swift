@@ -117,15 +117,20 @@ final class V3Figure {
         }
     }
 
-    private func baseFace() -> V3Face {
+    /// Expressions to rotate through in each state — mostly cheerful (the user found her too serious).
+    private var pool: [V3Face] {
         switch state {
-        case .idle: return [.smile, .calm, .smile, .giggle].filter { $0 != face }.randomElement() ?? .smile
-        case .working: return .serious
-        case .waiting: return .surprised
-        case .strained: return .pout
-        case .crushed: return .aggrieved
-        case .sleepy: return .giggle
+        case .idle: return [.smile, .giggle, .smile, .shy, .giggle, .calm]
+        case .working: return [.smile, .giggle, .serious, .smile, .calm]
+        case .waiting: return [.surprised, .smile, .shy]
+        case .strained: return [.pout, .smile, .surprised]
+        case .crushed: return [.aggrieved, .pout, .surprised]
+        case .sleepy: return [.giggle, .calm, .shy]
         }
+    }
+
+    private func baseFace() -> V3Face {
+        pool.filter { $0 != face }.randomElement() ?? .smile
     }
 
     private func setFace(_ f: V3Face, force: Bool = false) {
@@ -145,10 +150,10 @@ final class V3Figure {
             action = nil
             setFace(baseFace())
         }
-        // Change the idle expression now and then.
-        if action == nil && now >= holdUntil && state == .idle && now >= idleFaceAt {
+        // Swap to another expression of the current state every 6–12 seconds.
+        if action == nil && now >= holdUntil && now >= idleFaceAt {
             if idleFaceAt != .distantPast { setFace(baseFace()) }
-            idleFaceAt = now.addingTimeInterval(.random(in: 25...45))
+            idleFaceAt = now.addingTimeInterval(.random(in: 6...12))
         }
 
         var dx: CGFloat = 0, dy: CGFloat = 0

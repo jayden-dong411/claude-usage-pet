@@ -9,3 +9,5 @@ windows/assets/icon.png
 windows/assets/ATTRIBUTION.txt
 windows/build-res/
 Assets/claude-lady/
+companions/*/build/
+companions/ChatGPTPet/Assets/gpt-dragon/

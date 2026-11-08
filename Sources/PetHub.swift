@@ -5,7 +5,7 @@ import SwiftUI
 // Coordination between the four local pets (Claude大小姐, GPT龙娘, Grok娘, DeepSeek娘), which run as
 // separate apps but should behave like one:
 // - One menu-bar item: only the "leader" (the first running pet in `PetHub.registry` order) shows it,
-//   with every provider's usage; clicking it opens an overview.
+//   with Claude's 5-hour limit; clicking it opens an overview of every provider.
 // - One focus timer: its state lives in ~/Library/Application Support/AIPets/hub.json, so starting or
 //   stopping it from any pet shows the countdown on all of them.
 // - One set of reminders (focus over, rest over, continuous use, late night): the leader decides when;
@@ -391,25 +391,10 @@ final class PetHub: NSObject {
                                           attributes: [.font: font]))
             return out
         }
-        if peers.isEmpty {
-            out.append(NSAttributedString(string: "—", attributes: [.font: font]))
-            return out
-        }
-        for (i, p) in peers.enumerated() {
-            if i > 0 { out.append(NSAttributedString(string: "  ", attributes: [.font: font])) }
-            let symbol = PeerCard.symbol(p.provider)
-            if let img = NSImage(systemSymbolName: symbol, accessibilityDescription: p.title)?
-                .withSymbolConfiguration(.init(pointSize: 10, weight: .semibold)) {
-                img.isTemplate = true
-                let a = NSTextAttachment()
-                a.image = img
-                a.bounds = NSRect(x: 0, y: -1, width: img.size.width, height: img.size.height)
-                out.append(NSAttributedString(attachment: a))
-            }
-            let value = p.provider == "deepseek" ? (p.short ?? "").replacingOccurrences(of: "DeepSeek ", with: "")
-                : (p.windows.first.map { "\(Int($0.utilization.rounded()))%" } ?? "—")
-            out.append(NSAttributedString(string: " " + value, attributes: [.font: font]))
-        }
+        // Only Claude's 5-hour limit (the user's choice); the overview has the rest.
+        let five = peers.first { $0.provider == "claude" }?.windows.first
+        out.append(NSAttributedString(string: "5h " + (five.map { "\(Int($0.utilization.rounded()))%" } ?? "—"),
+                                      attributes: [.font: font]))
         return out
     }
 
