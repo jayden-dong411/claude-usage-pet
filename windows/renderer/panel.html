@@ -80,7 +80,7 @@
     const prog = p ? `<div class="prog"><div class="bar"><i style="width:${(p.done / p.total) * 100}%;background:${p.done >= p.total ? 'rgba(52,199,89,.75)' : '#ff9500'}"></i></div>
       <b class="mono" style="color:${p.done >= p.total ? '#34c759' : '#ff9500'}">${p.done}/${p.total}</b>
       ${p.current && (s.isBusy || s.isWaiting) ? `<span class="meta">${U.esc(p.current)}</span>` : ''}</div>` : '';
-    return `<div class="task" data-id="${U.esc(s.id)}" title="${s.entrypoint.includes('desktop') ? '在 Claude 里打开这个会话' : U.esc(s.cwd)}">
+    return `<div class="task" data-id="${U.esc(s.id)}" title="${s.openTitle || (s.entrypoint.includes('desktop') ? '在 Claude 里打开这个会话' : U.esc(s.cwd))}">
       <span class="dot" style="background:${dot}"></span>
       <div style="flex:1;min-width:0"><div class="name">${U.esc(s.name)}</div><div class="meta">${U.esc(s.folderName)} · ${s.entryLabel}</div>${prog}</div>
       <div class="right"><div style="font-weight:600;color:${col}">${s.statusLabel}</div><div class="muted mono">${U.duration(now - s.statusSince)}</div></div>
@@ -96,8 +96,8 @@
         <div style="margin-top:6px;cursor:pointer" data-act="dashboard">${U.heatmap(s.days, { weeks: 22, cell: 10, gap: 3, hoverId: 'panel-heat' })}</div>
         ${s.indexing && !Object.keys(s.days).length ? `<div class="faint" style="font-size:11px">正在统计会话记录… ${Math.round(s.indexProgress * 100)}%</div>` : ''}</div>
       <hr>
-      <div class="row head"><img src="${s.v3 ? `../assets/v3/face_${s.v3face}.png` : `../assets/head/${s.face}.png`}" alt="" data-act="toggleFigure" title="${s.hasV3 ? '点头像切换形象' : ''}">
-        <div style="flex:1;min-width:0"><div class="row" style="gap:6px"><b style="font-size:14px">Claude大小姐</b><span class="badge">${s.levelName}</span></div>
+      <div class="row head"><img src="${s.v3 ? `../assets/${s.v3dir || 'v3'}/face_${s.v3face}.png` : `../assets/head/${s.face}.png`}" alt="" data-act="toggleFigure" title="${s.hasV3 ? '点头像切换形象' : ''}">
+        <div style="flex:1;min-width:0"><div class="row" style="gap:6px"><b style="font-size:14px">${U.esc(s.petName || 'Claude大小姐')}</b><span class="badge">${s.levelName}</span></div>
         <div class="meta">${U.esc(who || '大小姐现在：' + s.levelName)}</div></div>
         <button class="link" style="font-size:16px" data-act="refresh" title="刷新用量">${s.loadingUsage ? '…' : '⟳'}</button></div>
       ${s.hasV3 ? `<div class="switch"><button class="${s.v3 ? '' : 'on'}" data-act="figStickers">☺ 表情头像</button><button class="${s.v3 ? 'on' : ''}" data-act="figV3">♟ v3 小人</button></div>` : ''}
@@ -107,7 +107,7 @@
       ${(u?.extras || []).map((e) => `<div class="limit"><div class="top" style="font-weight:400;font-size:12px"><span>${e.label}</span><span class="mono">${Math.round(e.window.utilization)}%</span></div><div class="bar thin"><i style="width:${e.window.utilization}%;background:${U.barColor(e.window.utilization)}"></i></div></div>`).join('')}
       ${s.usageError && (!u || s.needsLogin) ? `<div class="box"><div class="meta" style="white-space:normal">${U.esc(s.usageError)}</div>
         ${s.needsLogin ? `<button class="btn primary" style="margin-top:6px" data-act="login">登录 claude.ai 查看用量</button>` : ''}</div>` : ''}
-      ${!s.settings.hasSecondary ? `<button class="link" data-act="loginSecond" style="align-self:flex-start">＋ 添加另一个账号</button>` : ''}`;
+      ${!s.settings.hasSecondary && s.canAddAccount !== false ? `<button class="link" data-act="loginSecond" style="align-self:flex-start">＋ 添加另一个账号</button>` : ''}`;
     // "其他额度": second account + other tools, folded into one summary row.
     const sums = [];
     if (s.settings.hasSecondary) sums.push(`另一个账号 ${s.secondary?.fiveHour ? Math.round(s.secondary.fiveHour.utilization) + '%' : '—'}`);
@@ -124,8 +124,8 @@
             : `<div class="row" style="margin-top:6px"><span class="meta">${U.esc(s.secondaryError || '读取中…')}</span><span class="spacer"></span><button class="btn" data-act="loginSecond">登录</button></div>`}</div>`;
     }
     if (open) for (const p of s.peers) {
-      const tint = { codex: '110,92,219', grok: '199,158,51', deepseek: '77,107,254' }[p.provider] || '150,150,150';
-      const icon = { codex: '✦', grok: '⚡', deepseek: '🐟' }[p.provider] || '•';
+      const tint = { claude: '217,119,87', codex: '110,92,219', grok: '199,158,51', deepseek: '77,107,254' }[p.provider] || '150,150,150';
+      const icon = { claude: '✺', codex: '✦', grok: '⚡', deepseek: '🐟' }[p.provider] || '•';
       const wins = p.windows.map((w) => `<div style="flex:1"><div class="row" style="font-size:12px"><span>${w.label}</span><span class="spacer"></span><b class="mono" style="color:${U.barColor(w.utilization)}">${Math.round(w.utilization)}%</b></div>
         <div class="bar thin" style="margin:3px 0"><i style="width:${Math.min(100, w.utilization)}%;background:${U.barColor(w.utilization)}"></i></div>
         <div class="meta">${w.resetsAt ? U.when(w.resetsAt) + ' 重置' : '还没开始计时'}</div></div>`).join('');
@@ -137,12 +137,12 @@
     }
     html += `<hr>
       <div><div class="row"><h3>正在进行的任务</h3><span class="spacer"></span>
-        <span class="meta" style="color:${waiting ? 'var(--alert)' : ''}">${waiting ? `${waiting} 等你 · ` : ''}${busy} 进行中 / ${s.sessions.length} 个会话</span></div>
-        <div class="tasks" style="margin-top:8px">${s.sessions.length ? s.sessions.map((x) => task(x, now)).join('') : '<div class="meta">现在没有 Claude 会话，大小姐在悠闲喝茶～</div>'}</div></div>
+        <span class="meta" style="color:${waiting ? 'var(--alert)' : ''}">${waiting ? `${waiting} 等你 · ` : ''}${busy} 进行中 / ${s.sessions.length} 个${s.sessionNoun || '会话'}</span></div>
+        <div class="tasks" style="margin-top:8px">${s.sessions.length ? s.sessions.map((x) => task(x, now)).join('') : `<div class="meta">${U.esc(s.emptyTasks || '现在没有 Claude 会话，大小姐在悠闲喝茶～')}</div>`}</div></div>
       <hr>
       <div class="foot"><div class="row"><button class="link" data-act="dashboard">▥ 用量统计</button><button class="link" data-act="settings">⚙ 设置</button><span class="spacer"></span><button class="link" data-act="quit">退出</button></div>
         <div style="margin-top:6px">${s.lastUsageUpdate ? `${U.esc(u?.source || '')} · 更新于 ${U.clock(s.lastUsageUpdate)}` : '用量尚未获取'}</div>
-        <div class="faint" style="font-size:9px;margin-top:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="${U.esc(s.attribution)}">素材：Claude大小姐的日记本 · 角色设定：ZipZipPipe（胖次狐）· CC BY-NC-SA 4.0</div></div>`;
+        <div class="faint" style="font-size:9px;margin-top:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="${U.esc(s.attribution)}">${U.esc(s.attrShort || '素材：Claude大小姐的日记本 · 角色设定：ZipZipPipe（胖次狐）· CC BY-NC-SA 4.0')}</div></div>`;
     root.innerHTML = html;
     requestAnimationFrame(() => window.pet.panelSize(root.scrollHeight));
   }

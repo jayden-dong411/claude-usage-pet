@@ -1,0 +1,38 @@
+{
+  "appId": "io.github.jayden-dong411.gpt-dragon-pet",
+  "productName": "GPTDragonPet",
+  "copyright": "MIT (code) · character art CC BY-NC-SA 4.0",
+  "extraMetadata": {
+    "name": "gpt-dragon-pet",
+    "productName": "GPTDragonPet",
+    "description": "GPT龙娘 · ChatGPT / Codex 额度桌宠（Windows 版）",
+    "main": "main-gpt.js"
+  },
+  "directories": { "output": "../dist/windows", "buildResources": "build-res" },
+  "files": [
+    "main-gpt.js",
+    "preload.js",
+    "package.json",
+    "lib/**",
+    "renderer/**",
+    "assets/gpt-v3/**",
+    "assets/gpt-icon.png"
+  ],
+  "asar": true,
+  "win": {
+    "executableName": "GPTDragonPet",
+    "target": [ { "target": "nsis", "arch": ["x64"] }, { "target": "zip", "arch": ["x64"] } ],
+    "icon": "build-res/gpt-icon.png",
+    "signAndEditExecutable": false
+  },
+  "nsis": {
+    "oneClick": false,
+    "perMachine": false,
+    "allowToChangeInstallationDirectory": true,
+    "shortcutName": "GPT龙娘",
+    "uninstallDisplayName": "GPT龙娘 额度桌宠",
+    "artifactName": "GPTDragonPet-Setup-${version}-win-x64.${ext}",
+    "language": "2052"
+  },
+  "artifactName": "GPTDragonPet-${version}-win-${arch}-portable.${ext}"
+}

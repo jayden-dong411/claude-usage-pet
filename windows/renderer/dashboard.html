@@ -110,7 +110,7 @@
       <div style="min-width:0"><div class="k">${k}</div><div class="v">${v}</div><div class="s">${s}</div></div></div>`;
     const seg = (name, opts, cur) => `<div class="seg" data-seg="${name}">${opts.map(([v, l]) => `<button data-v="${v}" class="${String(v) === String(cur) ? 'on' : ''}">${l}</button>`).join('')}</div>`;
     root.innerHTML = `
-      <div class="row" style="align-items:flex-start"><div><h1>Claude Code 用量统计</h1>
+      <div class="row" style="align-items:flex-start"><div><h1>${S.dashTitle || 'Claude Code 用量统计'}</h1>
         <div class="muted" style="margin-top:3px">最近 ${range} 天 · ${U.hours(tot.activeSeconds)} · ${U.cn(U.total(tot.tokens))} token · ${tot.sessions.size} 个会话</div></div>
         <span class="spacer"></span><span class="muted" style="font-size:12px">${S.indexing ? (S.lastIndexed ? '更新中…' : `首次统计 ${Math.round(S.indexProgress * 100)}%`) : S.lastIndexed ? '更新于 ' + U.clock(S.lastIndexed) : ''}</span>
         <button class="link" data-act="refreshIndex" title="重新统计">⟳</button></div>
@@ -128,7 +128,8 @@
         <div class="chart" id="tok" style="margin-top:10px"></div></div>
       <div class="card"><h3>每天使用时长</h3><div class="chart" id="time" style="margin-top:10px"></div></div>
       <div class="two">${rank('按模型', Object.entries(tot.models))}${rank('按项目', Object.entries(tot.projects).map(([k, v]) => [k, v.tokens, v.secs]))}</div>
-      <div class="faint" style="font-size:11px">数据来自这台电脑上 ~/.claude/projects 里的 Claude Code 会话记录（桌面版和终端都算），不含其他设备。使用时长按同一会话里相邻两条记录间隔不超过 5 分钟累计。</div>`;
+      <div class="faint" style="font-size:11px">${S.dashNote || '数据来自这台电脑上 ~/.claude/projects 里的 Claude Code 会话记录（桌面版和终端都算），不含其他设备。使用时长按同一会话里相邻两条记录间隔不超过 5 分钟累计。'}</div>`;
+    if (S.dashTitle) document.title = S.dashTitle;
     const [label, fn] = METRICS[metric];
     barChart('tok', series, (d) => (d.stats ? fn(d.stats.tokens) : 0), 'var(--tokens)', (v) => U.cn(v),
       (d) => `<b>${label} ${U.cn(d.stats ? fn(d.stats.tokens) : 0)}</b><div class="muted">${d.stats ? d.stats.messages : 0} 次回复</div>`, 210);

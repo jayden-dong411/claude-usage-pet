@@ -8,7 +8,7 @@ const { UsageHistory } = require('./lib/history');
 const { WebFetcher, fetchOAuth, readDesktopCookies, CHROME_UA } = require('./lib/usage');
 const { Foreground } = require('./lib/foreground');
 const EXPR = require('./lib/expressions');
-const { readPeers, codexError } = require('./lib/peers');
+const { readPeers, codexError, writePeer } = require('./lib/peers');
 
 app.userAgentFallback = CHROME_UA;
 const args = process.argv.slice(1);
@@ -245,6 +245,9 @@ function refreshSessions(notifyChanges) {
 function applyUsage(snap) {
   state.usage = snap; state.usageError = null; state.needsLogin = false; state.lastUsageUpdate = Date.now();
   history.record(snap);
+  const win = (label, w) => (w ? { label, utilization: w.utilization, resetsAt: w.resetsAt || null } : null);
+  writePeer({ provider: 'claude', title: 'Claude', plan: snap.plan || null, observedAt: Date.now(),
+    windows: [win('5 小时', snap.fiveHour), win('每周', snap.sevenDay)].filter(Boolean) });
   if (logins.main) { logins.main.close(); react('greet', 5, '登录成功，本小姐看到用量了～'); }
   broadcast();
 }

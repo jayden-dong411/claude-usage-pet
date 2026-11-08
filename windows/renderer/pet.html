@@ -39,7 +39,7 @@
   let face = '', hopAt = 0, shakeAt = 0;
   const replay = (cls) => { const f = $('face'); f.classList.remove('hop', 'shake'); void f.offsetWidth; f.classList.add(cls); };
   window.pet.onState((s) => {
-    const src = s.v3 ? `../assets/v3/face_${s.v3face}.png` : `../assets/head/${s.face}.png`;
+    const src = s.v3 ? `../assets/${s.v3dir || 'v3'}/face_${s.v3face}.png` : `../assets/head/${s.face}.png`;
     if (src !== face) { face = src; $('face').src = src; }
     $('face').classList.toggle('v3', !!s.v3);
     if (s.hopAt !== hopAt) { if (hopAt) replay('hop'); hopAt = s.hopAt; }

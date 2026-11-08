@@ -10,7 +10,9 @@
   "scripts": {
     "start": "electron .",
     "snapshot": "electron . --snapshot ../build/win-snapshots --demo",
-    "dist:win": "electron-builder --win --x64"
+    "dist:win": "electron-builder --win --x64",
+    "start:gpt": "electron main-gpt.js",
+    "dist:win:gpt": "electron-builder --win --x64 --config build-gpt.json"
   },
   "dependencies": {
     "sql.js": "1.12.0"
@@ -34,6 +36,8 @@
       "lib/**",
       "renderer/**",
       "assets/**",
+      "!assets/gpt-icon.png",
+      "!assets/gpt-v3/**",
       "node_modules/sql.js/dist/sql-wasm.js",
       "node_modules/sql.js/dist/sql-wasm.wasm",
       "node_modules/sql.js/package.json"

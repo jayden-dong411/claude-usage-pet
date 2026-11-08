@@ -158,11 +158,41 @@ function deepseek() {
   } catch { return null; }
 }
 
-/** All other tools' usage that exists on this machine. */
-async function readPeers(fetchFn) {
+// ---------------------------------------------------------------- sharing between the pets
+// Same files and format as the macOS PeerStore: <appData>/AIPets/<provider>.json, dates in seconds.
+// Claude limits can only be fetched by the Claude pet (it holds the claude.ai login), so it writes
+// claude.json for the others; GPT龙娘 writes codex.json.
+
+const shareDir = path.join(appData, 'AIPets');
+
+function writePeer(u) {
+  try {
+    fs.mkdirSync(shareDir, { recursive: true });
+    const sec = (t) => (t == null ? undefined : t / 1000);
+    const out = { ...u, observedAt: sec(u.observedAt), windows: (u.windows || []).map((w) => ({ ...w, resetsAt: sec(w.resetsAt) })), lines: u.lines || [] };
+    const file = path.join(shareDir, `${u.provider}.json`);
+    fs.writeFileSync(file + '.tmp', JSON.stringify(out));
+    fs.renameSync(file + '.tmp', file);
+  } catch { /* sharing is best-effort */ }
+}
+
+function readPeer(provider, maxAgeMs = 24 * 3600e3) {
+  try {
+    const o = JSON.parse(fs.readFileSync(path.join(shareDir, `${provider}.json`), 'utf8'));
+    const observedAt = o.observedAt * 1000;
+    if (!(Date.now() - observedAt < maxAgeMs)) return null;
+    return { ...o, observedAt, windows: (o.windows || []).map((w) => ({ ...w, resetsAt: w.resetsAt ? w.resetsAt * 1000 : null })) };
+  } catch { return null; }
+}
+
+/** All other tools' usage that exists on this machine, leaving out `exclude` (the pet's own tool). */
+async function readPeers(fetchFn, exclude = 'claude') {
   const out = [];
-  const c = (await codexLive(fetchFn)) || codexLogs();
-  if (c) out.push(c);
+  if (exclude !== 'claude') { const c = readPeer('claude'); if (c) out.push(c); }
+  if (exclude !== 'codex') {
+    const c = readPeer('codex', 300e3) || (await codexLive(fetchFn)) || codexLogs();
+    if (c) out.push(c);
+  }
   const g = grokBot(); if (g) out.push(g);
   const d = deepseek(); if (d) out.push(d);
   return out;
@@ -170,4 +200,4 @@ async function readPeers(fetchFn) {
 
 const codexError = () => codexCache.error;
 
-module.exports = { readPeers, codexError };
+module.exports = { readPeers, codexError, codexLive, codexLogs, writePeer, readPeer };

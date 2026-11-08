@@ -29,13 +29,13 @@
   <div><h3>外观</h3><div class="group">
     <div class="item"><label>大小</label><input type="range" data-k="scale" min="0.6" max="1.6" step="0.05"><span class="val" data-v="scale"></span></div>
     <div class="item"><label>透明度</label><input type="range" data-k="opacity" min="0.3" max="1" step="0.05"><span class="val" data-v="opacity"></span></div>
-    <div class="item"><label>形象</label><select data-k="figure"><option value="stickers">表情头像</option><option value="v3">v3 小人</option></select></div>
+    <div class="item" id="figRow"><label>形象</label><select data-k="figure"><option value="stickers">表情头像</option><option value="v3">v3 小人</option></select></div>
     <div class="item"><label>表情轮换间隔</label><input type="range" data-k="rotateSeconds" min="5" max="120" step="1"><span class="val" data-v="rotateSeconds"></span></div>
     <div class="item"><label>偶尔说句话</label><label class="sw"><input type="checkbox" data-k="chatter"><span></span></label></div>
   </div></div>
   <div><h3>什么时候出现</h3><div class="group">
-    <div class="item"><label>只在 Claude 在前台时显示</label><label class="sw"><input type="checkbox" data-k="onlyWithClaude"><span></span></label></div>
-    <div class="item"><label>Claude 全屏时隐藏</label><label class="sw"><input type="checkbox" data-k="hideInFullscreen"><span></span></label></div>
+    <div class="item"><label><span class="host">Claude</span> 在前台时才显示</label><label class="sw"><input type="checkbox" data-k="onlyWithClaude"><span></span></label></div>
+    <div class="item"><label><span class="host">Claude</span> 全屏时隐藏</label><label class="sw"><input type="checkbox" data-k="hideInFullscreen"><span></span></label></div>
     <div class="item"><label>开机自动启动</label><label class="sw"><input type="checkbox" data-k="launchAtLogin"><span></span></label></div>
   </div></div>
   <div><h3>提醒</h3><div class="group">
@@ -52,6 +52,9 @@
   let dragging = false;
   window.pet.onState((s) => {
     if (dragging) return;
+    if (s.petName) document.title = `${s.petName} 设置`;
+    document.querySelectorAll('.host').forEach((el) => { el.textContent = s.hostName || 'Claude'; });
+    document.getElementById('figRow').style.display = s.hasStickers === false ? 'none' : '';
     document.querySelectorAll('[data-k]').forEach((el) => {
       const v = s.settings[el.dataset.k];
       if (el.type === 'checkbox') el.checked = !!v; else el.value = v;

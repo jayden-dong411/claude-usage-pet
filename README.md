@@ -22,10 +22,11 @@
 | **Claude大小姐**（Claude） | macOS 14 及以上（Intel 和 Apple 芯片通用） | `ClaudeUsagePet-…-macOS.zip` | ✅ 可用 |
 | **Claude大小姐**（Claude） | Windows 10 / 11（64 位） | `ClaudeUsagePet-Setup-…-win-x64.exe`（安装版）<br>`ClaudeUsagePet-…-win-x64-portable.zip`（免安装） | 🧪 测试版 |
 | **GPT龙娘**（ChatGPT · Codex） | macOS 14 及以上 | `GPTDragonPet-…-macOS.zip` | ✅ 可用 |
+| **GPT龙娘**（ChatGPT · Codex） | Windows 10 / 11（64 位） | `GPTDragonPet-Setup-…-win-x64.exe`（安装版）<br>`GPTDragonPet-…-win-x64-portable.zip`（免安装） | 🧪 测试版 |
 | **Grok娘**（Grok Bot） | macOS 14 及以上 | `GrokPet-…-macOS.zip` | ✅ 可用 |
 | **DeepSeek娘**（DeepSeek Harness） | macOS 14 及以上 | `DeepSeekPet-…-macOS.zip` | ✅ 可用 |
 
-> Windows 版是用 Electron 重写的 Claude大小姐，作者还没在 Windows 真机上完整测试过，遇到问题欢迎提 [Issue](../../issues)。另外三只桌宠目前只有 Mac 版，见下方「另外三只桌宠」。
+> Windows 版是用 Electron 重写的 Claude大小姐和 GPT龙娘，作者还没在 Windows 真机上完整测试过，遇到问题欢迎提 [Issue](../../issues)。Grok娘和 DeepSeek娘目前只有 Mac 版，见下方「另外三只桌宠」。
 
 ## 安装（Windows）
 
@@ -35,6 +36,8 @@
 4. 用量会依次尝试：读取 Claude 桌面版的登录 → 读取 Claude Code 的登录（`%USERPROFILE%\.claude\.credentials.json`）→ 都不行时，在面板里点 **「登录 claude.ai 查看用量」** 单独登录一次（之后会记住）。
 
 > Windows 版也有：v3 小人、「其他额度」折叠区（Codex 实时额度、Grok Bot、DeepSeek 余额）、托盘悬停显示 5 小时额度、专注番茄钟、久坐 / 熬夜提醒、双击跳一下和摸头。另外支持 **系统通知**——大小姐隐藏时（Claude 不在前台），任务完成、需要你批准或到点提醒都会弹出 Windows 通知。暂不支持：可动小人、用量统计里的 Codex / 合计切换。
+
+**GPT龙娘（Windows）**：安装 `GPTDragonPet-Setup-…-win-x64.exe` 后，她默认站在大小姐左边，只在 ChatGPT / Codex 窗口在前台时出现。额度用这台电脑上 Codex 的登录（`%USERPROFILE%\.codex\auth.json`，只读）实时查询 ChatGPT 账号的 5 小时 / 每周额度，查不到时退回本机 Codex 日志；面板里有进行中的 Codex 线程（点开会跳到 ChatGPT 里的那个线程）、Codex 用量统计，「其他额度」里能看到 Claude（由 Windows 版大小姐共享过来）、Grok Bot 和 DeepSeek。形象是 v3 小人（GPT龙娘动画素材没有开放授权，不随安装包分发）。
 
 <p align="center"><img src="docs/screenshots/windows-panel.png" width="300" alt="Windows 版面板（演示数据）"></p>
 
@@ -225,16 +228,19 @@ npm install                     # 安装 Electron、electron-builder、sql.js
 npm start                       # 在本机直接运行（Mac 上也能跑，用来调试界面）
 npm run snapshot                # 用演示数据离屏输出各界面截图
 npm run dist:win                # 生成 ../dist/windows/ 下的安装版 exe 和免安装 zip
+npm run start:gpt               # 运行 GPT龙娘（main-gpt.js）
+npm run dist:win:gpt            # 打包 GPT龙娘（配置在 build-gpt.json）
 ```
 
 | 文件 | 作用 |
 |---|---|
 | `main.js` | 窗口、托盘、菜单、数据刷新、表情轮换、只在 Claude 前台时显示 |
+| `main-gpt.js` / `lib/codex.js` | GPT龙娘：Codex 实时额度、线程状态和步骤进度、Codex 每日统计（和界面共用 `renderer/`） |
 | `lib/usage.js` | 用量接口；Windows 上用 DPAPI + AES-GCM 读取 Claude 桌面版的登录 |
 | `lib/foreground.js` | 用常驻 PowerShell 检测前台程序和是否全屏 |
 | `lib/sessions.js` / `lib/indexer.js` / `lib/history.js` | 会话与步骤进度、每日统计、用量预测（和 Mac 版同一套规则） |
 | `lib/expressions.js` | 表情分组（由 `gen-expressions.py` 从 `Sources/Expressions.swift` 生成） |
-| `lib/peers.js` | 「其他额度」：Codex 实时额度、Grok Bot、DeepSeek 余额 |
+| `lib/peers.js` | 「其他额度」：Codex 实时额度、Grok Bot、DeepSeek 余额；两只桌宠通过 `%APPDATA%\AIPets\*.json` 互相共享额度 |
 | `renderer/` | 桌宠、面板、用量统计、设置四个界面 |
 
 ### 目录结构
