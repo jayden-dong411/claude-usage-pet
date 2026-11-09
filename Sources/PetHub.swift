@@ -72,6 +72,28 @@ final class HubSettings: ObservableObject {
         notifyHidden = d.object(forKey: "notifyHidden") == nil ? true : d.bool(forKey: "notifyHidden")
     }
 
+    // MARK: Presets
+
+    /// One switch for how present the pets are: chatter, pet chat, notifications and the wellness reminders.
+    struct Preset { let id, title, detail: String; let chatter: Double; let chat, notify, sit, night: Bool }
+    static let presets: [Preset] = [
+        Preset(id: "default", title: "默认", detail: "适中说话（约 30 秒一句），会聊天，会提醒", chatter: 30, chat: true, notify: true, sit: true, night: true),
+        Preset(id: "work", title: "工作", detail: "少说话、不闲聊，重要的事照常提醒", chatter: 90, chat: false, notify: true, sit: true, night: true),
+        Preset(id: "company", title: "陪伴", detail: "常常说话，桌宠之间会聊天", chatter: 15, chat: true, notify: true, sit: true, night: true),
+        Preset(id: "quiet", title: "安静", detail: "不主动说话、不聊天、不发通知和健康提醒", chatter: 0, chat: false, notify: false, sit: false, night: false),
+    ]
+
+    /// The preset the current settings match, if any.
+    var preset: String? {
+        Self.presets.first { $0.chatter == chatterSeconds && $0.chat == petChat && $0.notify == notifyHidden
+            && $0.sit == sitReminder && $0.night == nightReminder }?.id
+    }
+
+    func apply(preset id: String) {
+        guard let p = Self.presets.first(where: { $0.id == id }) else { return }
+        chatterSeconds = p.chatter; petChat = p.chat; notifyHidden = p.notify; sitReminder = p.sit; nightReminder = p.night
+    }
+
     /// Picks up changes made in another pet's settings window.
     func reload() {
         let fm = d.object(forKey: "focusMinutes") == nil ? 25 : d.double(forKey: "focusMinutes")
@@ -92,11 +114,19 @@ struct HubSettingsSection: View {
 
     var body: some View {
         Section {
+            Picker("模式", selection: Binding(get: { s.preset ?? "custom" }, set: { if $0 != "custom" { s.apply(preset: $0) } })) {
+                ForEach(HubSettings.presets, id: \.id) { Text($0.title).tag($0.id) }
+                if s.preset == nil { Text("自定义").tag("custom") }
+            }
+            .pickerStyle(.segmented)
+            Text(HubSettings.presets.first { $0.id == s.preset }?.detail ?? "下面的设置是你自己调的组合")
+                .font(.caption).foregroundStyle(.secondary)
             Toggle("在菜单栏显示各家额度（四只桌宠共用一个）", isOn: $s.menuBarIcon)
             Toggle("连续使用 2 小时提醒起来活动（之后每 30 分钟）", isOn: $s.sitReminder)
             Toggle("凌晨 0–5 点还在用时提醒睡觉", isOn: $s.nightReminder)
             Picker("说话频率", selection: $s.chatterSeconds) {
-                Text("安静（约 90 秒一句）").tag(90.0)
+                Text("不主动说话").tag(0.0)
+                Text("偶尔（约 90 秒一句）").tag(90.0)
                 Text("适中（约 30 秒一句）").tag(30.0)
                 Text("话痨（约 15 秒一句）").tag(15.0)
             }
@@ -111,7 +141,7 @@ struct HubSettingsSection: View {
         } header: {
             Text("四只桌宠共用")
         } footer: {
-            Text("专注番茄钟、提醒和说话频率在四只桌宠之间同步：哪只桌宠在前台就由谁提醒你。「偶尔说句话」在各自的设置里开关。")
+            Text("专注番茄钟、提醒和说话频率在四只桌宠之间同步：哪只桌宠在前台就由谁提醒你。「偶尔说句话」在各自的设置里开关。\n\n版本 \(Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "—")（\(Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "—")）")
                 .font(.caption).foregroundStyle(.secondary)
         }
     }
@@ -131,6 +161,8 @@ protocol PetHubClient: AnyObject {
     func hubStatusMenu() -> NSMenu
     /// Two pets talk: stay visible for `total` seconds and say `lines` at their delays.
     func hubDuet(_ lines: [DuetLine], total: Double)
+    /// The user picked a preset from this pet's menu.
+    func hubPresetChanged(_ title: String)
 }
 
 @MainActor
@@ -237,6 +269,25 @@ final class PetHub: NSObject {
         if let f = state.focusEnd, f > Date() { return "🍅 专注 \(Self.mmss(f.timeIntervalSinceNow))" }
         if let r = state.restEnd, r > Date() { return "☕ 休息 \(Self.mmss(r.timeIntervalSinceNow))" }
         return nil
+    }
+
+    /// 「模式」 submenu (工作 / 陪伴 / 安静) for a pet's right-click menu.
+    func addModeItems(to m: NSMenu) {
+        let sub = NSMenu()
+        for p in HubSettings.presets {
+            let it = sub.addItem(withTitle: "\(p.title)：\(p.detail)", action: #selector(menuPreset(_:)), keyEquivalent: "")
+            it.target = self
+            it.representedObject = p.id
+            it.state = settings.preset == p.id ? .on : .off
+        }
+        let title = HubSettings.presets.first { $0.id == settings.preset }.map { "模式：\($0.title)" } ?? "模式：自定义"
+        m.addItem(withTitle: title, action: nil, keyEquivalent: "").submenu = sub
+    }
+
+    @objc private func menuPreset(_ sender: NSMenuItem) {
+        guard let id = sender.representedObject as? String else { return }
+        settings.apply(preset: id)
+        client?.hubPresetChanged(HubSettings.presets.first { $0.id == id }?.title ?? id)
     }
 
     /// Focus items for a pet's right-click menu.

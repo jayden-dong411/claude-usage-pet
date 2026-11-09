@@ -443,10 +443,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, NSW
         }
         if now >= nextChatter {
             let base = hub.settings.chatterSeconds
-            nextChatter = now.addingTimeInterval(.random(in: base * 0.7...base * 1.3))
+            nextChatter = now.addingTimeInterval(.random(in: max(base, 30) * 0.7...max(base, 30) * 1.3))
             var moods = [mood.rawValue]
             if (1..<6).contains(Calendar.current.component(.hour, from: now)) { moods.append("night") }
-            if settings.chatter, !hub.focusing, bubble.isHidden,
+            if base > 0, settings.chatter, !hub.focusing, bubble.isHidden,      // 0 = 不主动说话
                let line = Banter.chatter(Spec.petID, moods: moods, vars: Spec.banterVars(model)) ?? mood.lines.randomElement() {
                 say(line, seconds: 4.5)
             }
@@ -575,6 +575,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, NSW
         nextChatter = Date().addingTimeInterval(total + 10)
     }
 
+    func hubPresetChanged(_ title: String) {
+        react(.greet, loops: 1, say: ["默认": "恢复默认啦～", "工作": "好，安静陪你工作", "陪伴": "陪伴模式！我会多说话哦～", "安静": "嘘——我不出声啦"][title] ?? "模式：\(title)")
+    }
+
     func hubShowPanel() {
         forceShowUntil = Date().addingTimeInterval(20)
         updateVisibility()
@@ -649,6 +653,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, NSW
         item("打开 \(Spec.hostName)", #selector(menuOpenHost))
         m.addItem(.separator())
         play.addItems(to: m)
+        hub.addModeItems(to: m)
         hub.addFocusItems(to: m)
         m.addItem(.separator())
         item("设置…", #selector(menuSettings))

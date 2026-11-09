@@ -44,6 +44,10 @@ final class Settings: ObservableObject {
     /// Which look the pet uses: "stickers" (80 head stickers), "lady" (v2 animated figure) or "v3".
     @Published var figure: String { didSet { save("figure", figure) } }
     var animatedMode: Bool { figure == "lady" }
+    /// Where the Claude usage comes from: "auto" (desktop login → Claude Code → own login), "desktop",
+    /// "claudeCode" or "web" (the account logged in inside this app).
+    @Published var usageSource: String { didSet { save("usageSource", usageSource); onSourceChange?() } }
+    var onSourceChange: (() -> Void)?
 
     private init() {
         let d = UserDefaults.standard
@@ -57,7 +61,13 @@ final class Settings: ObservableObject {
         chatter = flag("chatter", true)
         alertWaiting = flag("alertWaiting", true)
         figure = d.string(forKey: "figure") ?? (flag("animatedMode", false) ? "lady" : "stickers")
+        usageSource = d.string(forKey: "usageSource") ?? "auto"
     }
+
+    static let usageSources: [(id: String, title: String)] = [
+        ("auto", "自动（桌面版 → Claude Code → 单独登录）"), ("desktop", "只用 Claude 桌面版的登录"),
+        ("claudeCode", "只用 Claude Code 的登录"), ("web", "只用在大小姐里单独登录的账号"),
+    ]
 
     private func save(_ key: String, _ value: Any) {
         d.set(value, forKey: key)
@@ -105,6 +115,16 @@ struct SettingsView: View {
             }
             Section("提醒") {
                 Toggle("会话等你批准或回复时提醒", isOn: $s.alertWaiting)
+            }
+            Section {
+                Picker("用量来源", selection: $s.usageSource) {
+                    ForEach(Settings.usageSources, id: \.id) { Text($0.title).tag($0.id) }
+                }
+            } header: {
+                Text("账号")
+            } footer: {
+                Text("桌面版的登录和你在大小姐里单独登录的账号分开保存，互不覆盖。在大小姐里登录后会自动切到「只用单独登录」。")
+                    .font(.caption).foregroundStyle(.secondary)
             }
             HubSettingsSection()
             HStack {

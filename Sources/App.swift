@@ -120,6 +120,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, NSW
         play.vars = { [weak self] in self?.banterVars() ?? [:] }
         play.moods = { [weak self] in self?.baseMoods().map(\.rawValue) ?? [] }
         settings.onChange = { [weak self] in self?.applySettings() }
+        settings.onSourceChange = { [weak self] in
+            guard let self else { return }
+            Task {
+                await self.model.refreshUsage()
+                let title = Settings.usageSources.first { $0.id == self.settings.usageSource }?.title ?? ""
+                self.say("用量来源：\(title.components(separatedBy: "（").first ?? title)")
+            }
+        }
         model.start()
         dashboard.start()
         if !snapshotMode { hub.start(me: "claude", client: self) }
@@ -589,8 +597,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, NSW
     private func chatter(_ moods: [Mood], _ now: Date) {
         guard now >= nextChatter else { return }
         let base = hub.settings.chatterSeconds
-        nextChatter = now.addingTimeInterval(.random(in: base * 0.7...base * 1.3))
-        guard settings.chatter, !focusing, bubble.isHidden else { return }
+        nextChatter = now.addingTimeInterval(.random(in: max(base, 30) * 0.7...max(base, 30) * 1.3))
+        guard base > 0, settings.chatter, !focusing, bubble.isHidden else { return }     // 0 = 不主动说话
         if let line = Banter.chatter("claude", moods: moods.map(\.rawValue), vars: banterVars())
             ?? moods.randomElement()?.lines.randomElement() {
             say(line, seconds: 4.5)
@@ -761,7 +769,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, NSW
             loginPoll = Timer.scheduledTimer(withTimeInterval: 4, repeats: true) { [weak self] _ in
                 Task { @MainActor in
                     guard let self else { return }
-                    if self.loginIsSecondary { await self.model.refreshSecondary() } else { await self.model.refreshUsage() }
+                    if self.loginIsSecondary { await self.model.refreshSecondary() } else { await self.model.checkManualLogin() }
                 }
             }
         }
@@ -831,6 +839,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, NSW
         nextChatter = Date().addingTimeInterval(total + 10)
     }
 
+    func hubPresetChanged(_ title: String) {
+        react(.greet, say: ["默认": "恢复默认啦～", "工作": "好，本小姐安静陪你工作", "陪伴": "陪伴模式！本小姐要多说话啦～", "安静": "嘘——本小姐不出声了"][title] ?? "模式：\(title)")
+    }
+
     func hubShowPanel() {
         forceShowUntil = Date().addingTimeInterval(20)
         updateVisibility()
@@ -871,8 +883,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, NSW
         item("立即刷新", #selector(menuRefresh))
         m.addItem(.separator())
         play.addItems(to: m)
+        hub.addModeItems(to: m)
         hub.addFocusItems(to: m)
         m.addItem(.separator())
+        let src = NSMenu()
+        for s in Settings.usageSources {
+            let it = src.addItem(withTitle: s.title, action: #selector(menuUsageSource(_:)), keyEquivalent: "")
+            it.target = self
+            it.representedObject = s.id
+            it.state = settings.usageSource == s.id ? .on : .off
+        }
+        m.addItem(withTitle: "用量来源", action: nil, keyEquivalent: "").submenu = src
         item("重新读取桌面版登录", #selector(menuDesktopLogin))
         item("登录 / 切换 claude.ai 账号…", #selector(menuLogin))
         item("退出 claude.ai 登录", #selector(menuLogout))
@@ -895,10 +916,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, NSW
     @objc private func menuSettings() { openSettings() }
     @objc private func menuRefresh() { Task { await model.refreshUsage(); say("刷新好啦") } }
     @objc private func menuLogin() { openLogin(secondary: false) }
+    @objc private func menuUsageSource(_ sender: NSMenuItem) {
+        if let id = sender.representedObject as? String { settings.usageSource = id }
+    }
     @objc private func menuSecondary() { openLogin(secondary: true) }
     @objc private func menuRemoveSecondary() { Task { await model.removeSecondary(); say("已移除另一个账号") } }
     @objc private func menuDesktopLogin() {
         DesktopLogin.resetDenied()
+        if settings.usageSource == "web" || settings.usageSource == "claudeCode" { settings.usageSource = "auto" }
         Task {
             await model.refreshUsage()
             if model.usage?.source == "Claude 桌面版登录" { react(.greet, say: "已用桌面版的登录～") }

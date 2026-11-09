@@ -26,13 +26,21 @@
 </head>
 <body>
 <div id="root">
+  <div><h3>模式</h3><div class="group">
+    <div class="item"><label>模式</label><select id="preset"><option value="default">默认</option><option value="work">工作</option><option value="company">陪伴</option><option value="quiet">安静</option><option value="custom" disabled>自定义</option></select></div>
+    <div class="item"><label class="faint" id="presetDetail" style="font-size:12px"></label></div>
+  </div></div>
+  <div id="sourceBox" style="display:none"><h3>账号</h3><div class="group">
+    <div class="item"><label>用量来源</label><select data-k="usageSource"></select></div>
+    <div class="item"><label class="faint" style="font-size:12px;white-space:normal">桌面版的登录和你在桌宠里单独登录的账号分开保存，互不覆盖；在桌宠里登录后会自动切到「只用单独登录」。</label></div>
+  </div></div>
   <div><h3>外观</h3><div class="group">
     <div class="item"><label>大小</label><input type="range" data-k="scale" min="0.6" max="1.6" step="0.05"><span class="val" data-v="scale"></span></div>
     <div class="item"><label>透明度</label><input type="range" data-k="opacity" min="0.3" max="1" step="0.05"><span class="val" data-v="opacity"></span></div>
     <div class="item" id="figRow"><label>形象</label><select data-k="figure"><option value="stickers">表情头像</option><option value="v3">v3 小人</option></select></div>
     <div class="item"><label>表情轮换间隔</label><input type="range" data-k="rotateSeconds" min="5" max="120" step="1"><span class="val" data-v="rotateSeconds"></span></div>
     <div class="item"><label>偶尔说句话</label><label class="sw"><input type="checkbox" data-k="chatter"><span></span></label></div>
-    <div class="item"><label>说话频率</label><select data-k="chatterSeconds"><option value="90">安静（约 90 秒一句）</option><option value="30">适中（约 30 秒一句）</option><option value="15">话痨（约 15 秒一句）</option></select></div>
+    <div class="item"><label>说话频率</label><select data-k="chatterSeconds"><option value="0">不主动说话</option><option value="90">偶尔（约 90 秒一句）</option><option value="30">适中（约 30 秒一句）</option><option value="15">话痨（约 15 秒一句）</option></select></div>
     <div class="item"><label>和另一只桌宠偶尔聊天</label><label class="sw"><input type="checkbox" data-k="petChat"><span></span></label></div>
   </div></div>
   <div><h3>什么时候出现</h3><div class="group">
@@ -47,13 +55,19 @@
     <div class="item"><label>凌晨 0–5 点还在用时提醒睡觉</label><label class="sw"><input type="checkbox" data-k="nightReminder"><span></span></label></div>
     <div class="item"><label>专注时长</label><input type="range" data-k="focusMinutes" min="10" max="60" step="5"><span class="val" data-v="focusMinutes"></span></div>
   </div></div>
-  <div class="row"><span class="spacer"></span><button class="btn" id="reset">恢复默认</button></div>
+  <div class="row"><span class="faint" id="version" style="font-size:12px"></span><span class="spacer"></span><button class="btn" id="reset">恢复默认</button></div>
 </div>
 <script>
   const fmt = { scale: (v) => `${Math.round(v * 100)}%`, opacity: (v) => `${Math.round(v * 100)}%`, rotateSeconds: (v) => `约 ${v} 秒`, focusMinutes: (v) => `${v} 分钟` };
   let dragging = false;
   window.pet.onState((s) => {
     if (dragging) return;
+    const src = document.querySelector('[data-k="usageSource"]');
+    if (s.sources && !src.options.length) for (const [id, label] of s.sources) src.add(new Option(label, id));
+    document.getElementById('sourceBox').style.display = s.hasUsageSource ? '' : 'none';
+    document.getElementById('preset').value = s.preset || 'custom';
+    document.getElementById('presetDetail').textContent = s.preset ? s.presets[s.preset].detail : '下面的设置是你自己调的组合';
+    document.getElementById('version').textContent = s.version ? `版本 ${s.version}` : '';
     if (s.petName) document.title = `${s.petName} 设置`;
     document.querySelectorAll('.host').forEach((el) => { el.textContent = s.hostName || 'Claude'; });
     document.getElementById('figRow').style.display = s.hasStickers === false ? 'none' : '';
@@ -76,6 +90,7 @@
     }
   });
   document.getElementById('reset').addEventListener('click', () => window.pet.act('resetSettings'));
+  document.getElementById('preset').addEventListener('change', (e) => window.pet.act('preset', e.target.value));
 </script>
 </body>
 </html>

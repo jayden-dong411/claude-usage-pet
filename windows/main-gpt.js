@@ -14,6 +14,7 @@ const { createPlay } = require('./lib/play');
 const { readPeers, codexLive, codexLogs, codexError, writePeer } = require('./lib/peers');
 
 const NAME = 'GPT龙娘';
+const PRESET_LINES = { default: '恢复默认啦～', work: '好，安静陪你工作', company: '陪伴模式！我会多说话哦～', quiet: '嘘——我不出声啦' };
 app.setName('GPTDragonPet');
 app.setPath('userData', path.join(app.getPath('appData'), 'GPTDragonPet'));   // never share Claude大小姐's settings
 const args = process.argv.slice(1);
@@ -35,6 +36,27 @@ const V3DIR = 'gpt-v3';
 const DEFAULTS = { scale: 1, opacity: 1, rotateSeconds: 12, chatter: true, onlyWithClaude: true,
   hideInFullscreen: false, alertWaiting: true, notifications: true, launchAtLogin: false, petPos: null,
   figure: 'v3', peersExpanded: false, focusMinutes: 25, sitReminder: true, nightReminder: true, chatterSeconds: 30, petChat: true };
+// 工作 / 陪伴 / 安静: one switch for chatter, pet chat, notifications and the wellness reminders.
+const PRESETS = {
+  default: { title: '默认', detail: '适中说话（约 30 秒一句），会聊天，会提醒', chatterSeconds: 30, petChat: true, notifications: true, sitReminder: true, nightReminder: true },
+  work: { title: '工作', detail: '少说话、不闲聊，重要的事照常提醒', chatterSeconds: 90, petChat: false, notifications: true, sitReminder: true, nightReminder: true },
+  company: { title: '陪伴', detail: '常常说话，会和另一只桌宠聊天', chatterSeconds: 15, petChat: true, notifications: true, sitReminder: true, nightReminder: true },
+  quiet: { title: '安静', detail: '不主动说话、不聊天、不发通知和健康提醒', chatterSeconds: 0, petChat: false, notifications: false, sitReminder: false, nightReminder: false },
+};
+const currentPreset = () => Object.keys(PRESETS).find((k) => Object.entries(PRESETS[k]).every(([key, v]) => ['title', 'detail'].includes(key) || settings[key] === v)) || null;
+function applyPreset(id, lines) {
+  const p = PRESETS[id];
+  if (!p) return;
+  for (const [k, v] of Object.entries(p)) if (k in DEFAULTS) settings[k] = v;
+  saveSettings();
+  react('greet', 3, lines[id]);
+}
+function presetMenu(lines) {
+  const cur = currentPreset();
+  return { label: `模式：${cur ? PRESETS[cur].title : '自定义'}`, submenu: Object.entries(PRESETS).map(([id, p]) => ({
+    label: `${p.title}：${p.detail}`, type: 'radio', checked: cur === id, click: () => applyPreset(id, lines) })) };
+}
+
 let settingsFile, settings = { ...DEFAULTS };
 function loadSettings() {
   settingsFile = path.join(app.getPath('userData'), 'settings.json');
@@ -75,7 +97,7 @@ function payload() {
     forecast7: history.forecast('live', false, state.usage?.sevenDay),
     spark: history.fiveHourSeries('live', state.usage?.fiveHour),
     petTask: taskText(), petPill: pillText(), alert: state.sessions.some((s) => s.isWaiting),
-    usageStale: usageStale(),
+    usageStale: usageStale(), version: app.getVersion(), preset: currentPreset(), presets: PRESETS,
     v3: true, hasV3: false, hasStickers: false, v3dir: V3DIR, ownSource: 'codex', dashSource: args.includes('--dash-all') ? 'all' : null,
     petName: NAME, hostName: 'ChatGPT', canAddAccount: false, sessionNoun: '线程',
     emptyTasks: '现在没有进行中的 Codex 线程，龙娘在晒太阳～',
@@ -182,8 +204,8 @@ function tickFace() {
   if (now >= v3Next) { v3Rotate(); broadcast(); }
   // Says something on her own every `chatterSeconds` (±30%).
   if (now >= nextChatter) {
-    nextChatter = now + settings.chatterSeconds * (0.7 + Math.random() * 0.6) * 1000;
-    if (settings.chatter && !state.bubble && !state.focusEnd) {
+    nextChatter = now + Math.max(settings.chatterSeconds, 30) * (0.7 + Math.random() * 0.6) * 1000;
+    if (settings.chatterSeconds && settings.chatter && !state.bubble && !state.focusEnd) {      // 0 = 不主动说话
       const moods = [mood()];
       if (state.sessions.some((s) => s.isBusy)) moods.push('working');
       if (state.sessions.some((s) => s.isWaiting)) moods.push('needsYou');
@@ -445,6 +467,7 @@ function menuTemplate() {
     { label: '立即刷新', click: () => { refreshUsage(); refreshPeers(); say('刷新好啦'); } },
     { type: 'separator' },
     ...(play ? play.menuItems() : []),
+    presetMenu(PRESET_LINES),
     ...focusItems(),
     { type: 'separator' },
     { label: '打开 ChatGPT 用量页', click: () => shell.openExternal('https://chatgpt.com/codex/settings/usage') },
@@ -512,6 +535,7 @@ ipcMain.handle('act', async (_e, name, ...a) => {
     case 'openPeer': return shell.openExternal({ claude: 'https://claude.ai/settings/usage', grok: 'grokbot://', deepseek: 'https://platform.deepseek.com/usage' }[a[0]] || 'https://chatgpt.com/codex');
     case 'startFocus': return startFocus();
     case 'stopFocus': return stopFocus();
+    case 'preset': return applyPreset(a[0], PRESET_LINES);
     case 'resetSettings': for (const k of ['scale', 'opacity', 'rotateSeconds', 'chatter', 'onlyWithClaude', 'hideInFullscreen', 'alertWaiting', 'notifications', 'focusMinutes', 'sitReminder', 'nightReminder', 'chatterSeconds', 'petChat']) setSetting(k, DEFAULTS[k]); return;
     case 'state': return payload();
     default: return null;

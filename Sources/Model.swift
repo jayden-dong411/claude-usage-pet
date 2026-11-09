@@ -50,7 +50,11 @@ final class AppModel: ObservableObject {
     var onUsageLoaded: ((UsageSnapshot) -> Void)?
     var onSecondaryLoaded: ((UsageSnapshot) -> Void)?
 
+    /// The account logged in inside this app (its own store; the desktop login no longer overwrites it).
     let web = WebUsageFetcher()
+    /// The Claude desktop app's login, copied into a store of its own.
+    let desktopWeb = WebUsageFetcher(store: WKWebsiteDataStore(forIdentifier: AppModel.desktopStoreID))
+    static let desktopStoreID = UUID(uuidString: "A1B2C3D4-0E5F-4A6B-8C7D-9E0F1A2B3C4D")!
     let history = UsageHistory()
     private var secondaryWeb: WebUsageFetcher?
     private var prevStatus: [String: String] = [:]
@@ -84,6 +88,7 @@ final class AppModel: ObservableObject {
             Task { @MainActor in
                 guard let self else { return }
                 self.web.reset()
+                self.desktopWeb.reset()
                 self.secondaryWeb = nil
                 try? await Task.sleep(nanoseconds: 5_000_000_000)      // let the network come back first
                 await self.refreshUsage()
@@ -142,68 +147,89 @@ final class AppModel: ObservableObject {
 
     private func refreshPrimary() async {
         var errors: [String] = []
+        let src = Settings.shared.usageSource
+        let auto = src == "auto"
 
         // 1) The Claude desktop app's claude.ai login (read-only; follows its current account).
-        let desktop: Result<[DesktopCookie], Error>
-        do {
-            desktop = try await withTimeLimit(20) {
-                await Task.detached { () -> Result<[DesktopCookie], Error> in
-                    Result(catching: { try DesktopLogin.readCookies() })
-                }.value
-            }
-        } catch {
-            desktop = .failure(error)
-        }
-        var importedDesktop = false
-        switch desktop {
-        case .success(let cookies):
-            _ = try? await withTimeLimit(15) { [web] in await web.importCookies(cookies) }
-            importedDesktop = true
-            let org = cookies.first(where: { $0.name == "lastActiveOrg" })?.value
+        if auto || src == "desktop" {
+            let desktop: Result<[DesktopCookie], Error>
             do {
-                var snap = try await web.fetch(preferOrg: org)
-                snap.source = "Claude 桌面版登录"
-                apply(snap)
-                return
+                desktop = try await withTimeLimit(20) {
+                    await Task.detached { () -> Result<[DesktopCookie], Error> in
+                        Result(catching: { try DesktopLogin.readCookies() })
+                    }.value
+                }
             } catch {
+                desktop = .failure(error)
+            }
+            switch desktop {
+            case .success(let cookies):
+                await migrateOldStore()
+                _ = try? await withTimeLimit(15) { [desktopWeb] in await desktopWeb.importCookies(cookies) }
+                let org = cookies.first(where: { $0.name == "lastActiveOrg" })?.value
+                do {
+                    var snap = try await desktopWeb.fetch(preferOrg: org)
+                    snap.source = "Claude 桌面版登录"
+                    apply(snap)
+                    return
+                } catch {
+                    errors.append("桌面版登录：\(error.localizedDescription)")
+                }
+            case .failure(let error):
                 errors.append("桌面版登录：\(error.localizedDescription)")
             }
-        case .failure(let error):
-            errors.append("桌面版登录：\(error.localizedDescription)")
         }
 
         // 2) Claude Code's own login (read-only, never refreshed or rewritten here).
-        let cred = (try? await withTimeLimit(15) { await Task.detached { KeychainOAuth.read() }.value }) ?? nil
-        if let cred {
-            if cred.expiresAt > Date().addingTimeInterval(30) {
-                do {
-                    apply(try await withTimeLimit(30) { try await OAuthUsageAPI.fetch(cred) })
-                    return
-                } catch {
-                    errors.append("Claude Code 令牌：\(error.localizedDescription)")
+        if auto || src == "claudeCode" {
+            let cred = (try? await withTimeLimit(15) { await Task.detached { KeychainOAuth.read() }.value }) ?? nil
+            if let cred {
+                if cred.expiresAt > Date().addingTimeInterval(30) {
+                    do {
+                        apply(try await withTimeLimit(30) { try await OAuthUsageAPI.fetch(cred) })
+                        return
+                    } catch {
+                        errors.append("Claude Code 令牌：\(error.localizedDescription)")
+                    }
+                } else {
+                    errors.append("Claude Code 令牌已过期")
                 }
-            } else {
-                errors.append("Claude Code 令牌已过期")
+            } else if src == "claudeCode" {
+                errors.append("没有找到 Claude Code 的登录")
             }
         }
 
-        // 3) claude.ai session inside the app's own web view (only if the desktop login wasn't used).
-        if importedDesktop {
-            usageError = errors.joined(separator: "；")
-            onChange?()
-            return
-        }
-        do {
-            apply(try await web.fetch())
-            return
-        } catch UsageError.notLoggedIn {
-            needsLogin = true
-            errors.append("claude.ai 未登录")
-        } catch {
-            errors.append("claude.ai：\(error.localizedDescription)")
+        // 3) The account logged in inside this app.
+        if auto || src == "web" {
+            do {
+                apply(try await web.fetch())
+                return
+            } catch UsageError.notLoggedIn {
+                needsLogin = true
+                errors.append("claude.ai 未登录")
+            } catch {
+                errors.append("claude.ai：\(error.localizedDescription)")
+            }
         }
         usageError = errors.joined(separator: "；")
         onChange?()
+    }
+
+    /// While the login window is open: is the account logged in there yet? Switches the source to it on success.
+    func checkManualLogin() async {
+        guard let snap = try? await web.fetch() else { return }
+        if Settings.shared.usageSource != "web" { Settings.shared.usageSource = "web" }
+        apply(snap)
+    }
+
+    /// Before 1.5 the desktop login was copied into the same store as the in-app login, overwriting it.
+    /// Clear that copy once, so the in-app login starts clean.
+    private func migrateOldStore() async {
+        guard !UserDefaults.standard.bool(forKey: "desktopStoreMigrated") else { return }
+        UserDefaults.standard.set(true, forKey: "desktopStoreMigrated")
+        guard Settings.shared.usageSource != "web" else { return }
+        await WebUsageFetcher.logout()
+        web.reset()
     }
 
     private func apply(_ snap: UsageSnapshot) {

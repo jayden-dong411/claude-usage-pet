@@ -3,7 +3,7 @@
 # The GPT龙娘 sprite sheet has no open license, so the packages use the v3 look (EXCLUDE_DRAGON=1).
 set -euo pipefail
 cd "$(dirname "$0")"
-VERSION="${1:-1.2.0}"
+VERSION="${1:-$(cat "$(dirname "$0")/../VERSION")}"
 OUT="$(cd .. && pwd)/dist"
 mkdir -p "$OUT"
 pack() {   # dir app-name zip-name host-app data-note

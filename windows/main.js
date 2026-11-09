@@ -32,8 +32,29 @@ const asset = (...p) => path.join(__dirname, 'assets', ...p);
 
 const DEFAULTS = { scale: 1, opacity: 1, rotateSeconds: 12, chatter: true, onlyWithClaude: true,
   hideInFullscreen: false, alertWaiting: true, notifications: true, launchAtLogin: false, petPos: null, hasSecondary: false,
-  figure: 'stickers', peersExpanded: false, focusMinutes: 25, sitReminder: true, nightReminder: true, chatterSeconds: 30, petChat: true };
+  figure: 'stickers', peersExpanded: false, focusMinutes: 25, sitReminder: true, nightReminder: true, chatterSeconds: 30, petChat: true, usageSource: 'auto', desktopStoreMigrated: false };
 let settingsFile, settings = { ...DEFAULTS };
+// 工作 / 陪伴 / 安静: one switch for chatter, pet chat, notifications and the wellness reminders.
+const PRESETS = {
+  default: { title: '默认', detail: '适中说话（约 30 秒一句），会聊天，会提醒', chatterSeconds: 30, petChat: true, notifications: true, sitReminder: true, nightReminder: true },
+  work: { title: '工作', detail: '少说话、不闲聊，重要的事照常提醒', chatterSeconds: 90, petChat: false, notifications: true, sitReminder: true, nightReminder: true },
+  company: { title: '陪伴', detail: '常常说话，会和另一只桌宠聊天', chatterSeconds: 15, petChat: true, notifications: true, sitReminder: true, nightReminder: true },
+  quiet: { title: '安静', detail: '不主动说话、不聊天、不发通知和健康提醒', chatterSeconds: 0, petChat: false, notifications: false, sitReminder: false, nightReminder: false },
+};
+const currentPreset = () => Object.keys(PRESETS).find((k) => Object.entries(PRESETS[k]).every(([key, v]) => ['title', 'detail'].includes(key) || settings[key] === v)) || null;
+function applyPreset(id, lines) {
+  const p = PRESETS[id];
+  if (!p) return;
+  for (const [k, v] of Object.entries(p)) if (k in DEFAULTS) settings[k] = v;
+  saveSettings();
+  react('greet', 3, lines[id]);
+}
+function presetMenu(lines) {
+  const cur = currentPreset();
+  return { label: `模式：${cur ? PRESETS[cur].title : '自定义'}`, submenu: Object.entries(PRESETS).map(([id, p]) => ({
+    label: `${p.title}：${p.detail}`, type: 'radio', checked: cur === id, click: () => applyPreset(id, lines) })) };
+}
+
 function loadSettings() {
   settingsFile = path.join(app.getPath('userData'), 'settings.json');
   try { settings = { ...DEFAULTS, ...JSON.parse(fs.readFileSync(settingsFile, 'utf8')) }; } catch { /* defaults */ }
@@ -54,7 +75,7 @@ const state = {
 const V3_FACES = ['smile', 'calm', 'surprised', 'shy', 'pout', 'giggle', 'serious', 'aggrieved'];
 const hasV3 = () => fs.existsSync(asset('v3', 'face_smile.png'));
 let play = null;            // picking up, shaking, poking, feeding, chatting (lib/play.js)
-let history, indexer, codexIndexer, duetLink, tracker, primaryWeb, secondaryWeb, foreground;
+let history, indexer, codexIndexer, duetLink, tracker, primaryWeb, secondaryWeb, desktopWeb, foreground;
 let pet, panel, dashboard, settingsWin, tray;
 const logins = { main: null, second: null };
 let prevStatus = new Map();
@@ -79,7 +100,7 @@ function payload() {
     forecast7: history.forecast(acct, false, state.usage?.sevenDay),
     spark: history.fiveHourSeries(acct, state.usage?.fiveHour),
     petTask: taskText(), petPill: pillText(), alert: state.sessions.some((s) => s.isWaiting),
-    usageStale: usageStale(),
+    usageStale: usageStale(), version: app.getVersion(), preset: currentPreset(), presets: PRESETS, hasUsageSource: true, sources: SOURCES,
     v3: settings.figure === 'v3' && hasV3(), hasV3: hasV3(), ownSource: 'claude', dashSource: args.includes('--dash-all') ? 'all' : null,
     focusing: state.focusEnd > Date.now(), resting: state.restEnd > Date.now(),
     now: Date.now(),
@@ -215,8 +236,8 @@ let nextChatter = Date.now() + 10e3;
 function tickChatter() {
   const now = Date.now();
   if (now < nextChatter || now < reactionUntil) return;
-  nextChatter = now + settings.chatterSeconds * (0.7 + Math.random() * 0.6) * 1000;
-  if (!settings.chatter || state.bubble || state.focusEnd > now) return;
+  nextChatter = now + Math.max(settings.chatterSeconds, 30) * (0.7 + Math.random() * 0.6) * 1000;
+  if (!settings.chatterSeconds || !settings.chatter || state.bubble || state.focusEnd > now) return;   // 0 = 不主动说话
   const u = state.usage, pc = (w) => (w ? `${Math.round(w.utilization)}%` : undefined);
   const moods = baseMoods();
   const l = banter.chatter('claude', moods, { five: pc(u?.fiveHour), week: pc(u?.sevenDay) })
@@ -291,21 +312,32 @@ async function refreshUsage() {
   if (DEMO || (state.loadingUsage && Date.now() - loadingSince < 120e3)) return;
   state.loadingUsage = true; loadingSince = Date.now(); broadcast();
   const errors = [];
+  const src = settings.usageSource, auto = src === 'auto';
   try {
-    let imported = false;
-    try {
-      const cookies = await withTimeLimit(readDesktopCookies(), 20000);
-      await withTimeLimit(primaryWeb.importCookies(cookies), 15000);
-      imported = true;
-      const snap = await primaryWeb.fetch(cookies.find((c) => c.name === 'lastActiveOrg')?.value);
-      snap.source = 'Claude 桌面版登录';
-      return applyUsage(snap);
-    } catch (e) { errors.push(`桌面版登录：${e.message}`); }
-    try {
-      const snap = await fetchOAuth();
-      if (snap) return applyUsage(snap);
-    } catch (e) { errors.push(`Claude Code 令牌：${e.message}`); }
-    if (!imported) {
+    // 1) Claude desktop's login, copied into a store of its own (it no longer overwrites the in-app login).
+    if (auto || src === 'desktop') {
+      try {
+        const cookies = await withTimeLimit(readDesktopCookies(), 20000);
+        if (!settings.desktopStoreMigrated) {          // before 1.5 the copy went into the in-app login's store
+          settings.desktopStoreMigrated = true; saveSettings();
+          if (src !== 'web') await primaryWeb.clear().catch(() => {});
+        }
+        await withTimeLimit(desktopWeb.importCookies(cookies), 15000);
+        const snap = await desktopWeb.fetch(cookies.find((c) => c.name === 'lastActiveOrg')?.value);
+        snap.source = 'Claude 桌面版登录';
+        return applyUsage(snap);
+      } catch (e) { errors.push(`桌面版登录：${e.message}`); }
+    }
+    // 2) Claude Code's login.
+    if (auto || src === 'claudeCode') {
+      try {
+        const snap = await withTimeLimit(fetchOAuth(), 30000);
+        if (snap) return applyUsage(snap);
+        if (src === 'claudeCode') errors.push('没有找到 Claude Code 的登录');
+      } catch (e) { errors.push(`Claude Code 令牌：${e.message}`); }
+    }
+    // 3) The account logged in inside this app.
+    if (auto || src === 'web') {
       try { return applyUsage(await primaryWeb.fetch()); } catch (e) {
         if (e.code === 'NOT_LOGGED_IN') { state.needsLogin = true; errors.push('claude.ai 未登录'); } else errors.push(`claude.ai：${e.message}`);
       }
@@ -481,6 +513,17 @@ function openSingle(ref, file, opts) {
 function openDashboard() { if (panel) panel.hide(); refreshIndex(); dashboard = openSingle(dashboard, 'dashboard.html', { width: 900, height: 900, minWidth: 760, minHeight: 600, title: 'Claude Code 用量统计' }); }
 function openSettings() { if (panel) panel.hide(); settingsWin = openSingle(settingsWin, 'settings.html', { width: 480, height: 700, resizable: false, title: 'Claude大小姐 设置' }); }
 
+async function checkManualLogin() {
+  let snap;
+  try { snap = await primaryWeb.fetch(); } catch { return; }
+  if (settings.usageSource !== 'web') { settings.usageSource = 'web'; saveSettings(); }
+  applyUsage(snap);
+}
+
+const SOURCES = [['auto', '自动（桌面版 → Claude Code → 单独登录）'], ['desktop', '只用 Claude 桌面版的登录'],
+  ['claudeCode', '只用 Claude Code 的登录'], ['web', '只用在大小姐里单独登录的账号']];
+const PRESET_LINES = { default: '恢复默认啦～', work: '好，本小姐安静陪你工作', company: '陪伴模式！本小姐要多说话啦～', quiet: '嘘——本小姐不出声了' };
+
 function openLogin(which) {
   if (panel) panel.hide();
   if (logins[which] && !logins[which].isDestroyed()) { logins[which].focus(); return; }
@@ -493,7 +536,8 @@ function openLogin(which) {
   w.webContents.setUserAgent(CHROME_UA);
   w.webContents.setWindowOpenHandler(({ url }) => { w.loadURL(url); return { action: 'deny' }; });
   w.loadURL('https://claude.ai/login');
-  const poll = setInterval(() => { web.loaded = false; which === 'second' ? refreshSecondary() : refreshUsage(); }, 4000);
+  // While the window is open, check only the account being logged in there; on success use it from now on.
+  const poll = setInterval(() => { web.loaded = false; which === 'second' ? refreshSecondary() : checkManualLogin(); }, 4000);
   w.on('closed', () => { clearInterval(poll); logins[which] = null; });
   logins[which] = w;
 }
@@ -549,8 +593,11 @@ function menuTemplate() {
     { label: '立即刷新', click: () => { refreshUsage(); refreshPeers(); say('刷新好啦'); } },
     { type: 'separator' },
     ...(play ? play.menuItems() : []),
+    presetMenu(PRESET_LINES),
     ...focusItems(),
     { type: 'separator' },
+    { label: '用量来源', submenu: SOURCES.map(([id, label]) => ({ label, type: 'radio', checked: settings.usageSource === id,
+      click: () => setSetting('usageSource', id) })) },
     { label: '登录 / 切换 claude.ai 账号…', click: () => openLogin('main') },
     { label: '退出 claude.ai 登录', click: async () => { await primaryWeb.clear(); state.usage = null; refreshUsage(); say('已退出 claude.ai 登录'); } },
     { label: settings.hasSecondary ? '重新登录另一个账号…' : '添加另一个账号…', click: () => openLogin('second') },
@@ -595,6 +642,7 @@ function setSetting(key, value) {
   if (key === 'opacity' && pet) pet.setOpacity(value);
   if (key === 'launchAtLogin') app.setLoginItemSettings({ openAtLogin: !!value });
   if (key === 'onlyWithClaude' || key === 'hideInFullscreen') updateVisibility();
+  if (key === 'usageSource') { refreshUsage(); say(`用量来源：${(SOURCES.find(([id]) => id === value) || [, ''])[1].split('（')[0]}`); }
   if (key === 'figure') { v3Rotate(true); react('greet', 3, value === 'v3' ? '换成 v3 小人啦～' : '换回表情头像啦～'); }
   broadcast();
 }
@@ -634,6 +682,7 @@ ipcMain.handle('act', async (_e, name, ...a) => {
     case 'openPeer': return shell.openExternal({ codex: 'https://chatgpt.com/codex', grok: 'grokbot://', deepseek: 'https://platform.deepseek.com/usage' }[a[0]] || 'https://claude.ai');
     case 'startFocus': return startFocus();
     case 'stopFocus': return stopFocus();
+    case 'preset': return applyPreset(a[0], PRESET_LINES);
     case 'resetSettings': for (const k of ['scale', 'opacity', 'rotateSeconds', 'chatter', 'onlyWithClaude', 'hideInFullscreen', 'alertWaiting', 'notifications', 'focusMinutes', 'sitReminder', 'nightReminder', 'chatterSeconds', 'petChat']) setSetting(k, DEFAULTS[k]); return;
     case 'state': return payload();
     default: return null;
@@ -736,6 +785,7 @@ app.whenReady().then(async () => {
   tracker = new ProgressTracker();
   primaryWeb = new WebFetcher('persist:claude-main');
   secondaryWeb = new WebFetcher('persist:claude-second');
+  desktopWeb = new WebFetcher('persist:claude-desktop');
   if (DEMO) demoData();
 
   createPet();
@@ -762,7 +812,7 @@ app.whenReady().then(async () => {
   setInterval(() => refreshSessions(true), 3000);
   setInterval(refreshUsage, 90e3);
   // After sleep the old page and connections are often dead: start over and refresh shortly after waking.
-  powerMonitor.on('resume', () => { primaryWeb.loaded = false; secondaryWeb.loaded = false; setTimeout(refreshUsage, 5000); });
+  powerMonitor.on('resume', () => { primaryWeb.loaded = false; secondaryWeb.loaded = false; desktopWeb.loaded = false; setTimeout(refreshUsage, 5000); });
   setInterval(refreshIndex, 180e3);
   setInterval(() => { tickFace(); tickChatter(); play?.tick(); updateVisibility(); }, 2000);
   duetLink = new DuetLink('claude', duetLines, canChat, () => ({ bounds: pet.getBounds(), visible: petVisible() }));

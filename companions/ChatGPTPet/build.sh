@@ -83,5 +83,9 @@ cat > "$APP/Contents/Info.plist" <<'PLIST'
 PLIST
 
 rm -rf "$TMP"
+# One version for every pet (repo-root VERSION), build number = commit count.
+VER="$(cat "$ROOT/../../VERSION" 2>/dev/null || echo 0.0.0)"
+BUILD="$(git -C "$ROOT" rev-list --count HEAD 2>/dev/null || echo 1)"
+/usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString $VER" -c "Set :CFBundleVersion $BUILD" "$APP/Contents/Info.plist"
 codesign --force --deep --sign - "$APP" >/dev/null 2>&1 || true
 echo "✓ 完成：$APP"
