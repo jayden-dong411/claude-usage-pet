@@ -10,6 +10,9 @@ import AppKit
 
 enum V3Face: String, CaseIterable {
     case smile, calm, surprised, shy, pout, giggle, serious, aggrieved
+    // The second eight (AI-drawn in the same style, v1.6); each one is optional — a build without the picture
+    // simply never shows it.
+    case sleepy, excited, angry, crying, thinking, wink, eating, dizzy
 }
 
 /// Long-running state, from the app's mood.
@@ -40,6 +43,7 @@ enum V3Assets {
     static var available: Bool { face(.smile) != nil }
 
     static func face(_ f: V3Face) -> NSImage? { image("face_\(f.rawValue)") }
+    static func has(_ f: V3Face) -> Bool { face(f) != nil }
 }
 
 @MainActor
@@ -96,6 +100,7 @@ final class V3Figure {
 
     /// Holds an expression for a while (e.g. while a speech bubble is up).
     func show(_ f: V3Face, seconds: Double) {
+        guard V3Assets.has(f) else { return }
         setFace(f)
         holdUntil = Date().addingTimeInterval(seconds)
     }
@@ -119,14 +124,16 @@ final class V3Figure {
 
     /// Expressions to rotate through in each state — mostly cheerful (the user found her too serious).
     private var pool: [V3Face] {
+        let all: [V3Face]
         switch state {
-        case .idle: return [.smile, .giggle, .smile, .shy, .giggle, .calm]
-        case .working: return [.smile, .giggle, .serious, .smile, .calm]
-        case .waiting: return [.surprised, .smile, .shy]
-        case .strained: return [.pout, .smile, .surprised]
-        case .crushed: return [.aggrieved, .pout, .surprised]
-        case .sleepy: return [.giggle, .calm, .shy]
+        case .idle: all = [.smile, .giggle, .smile, .shy, .giggle, .calm, .wink, .excited]
+        case .working: all = [.smile, .giggle, .serious, .smile, .calm, .thinking, .thinking]
+        case .waiting: all = [.surprised, .smile, .shy, .thinking]
+        case .strained: all = [.pout, .smile, .surprised, .thinking, .angry]
+        case .crushed: all = [.aggrieved, .pout, .surprised, .crying, .dizzy]
+        case .sleepy: all = [.giggle, .calm, .shy, .sleepy, .sleepy]
         }
+        return all.filter(V3Assets.has)
     }
 
     private func baseFace() -> V3Face {
@@ -134,6 +141,7 @@ final class V3Figure {
     }
 
     private func setFace(_ f: V3Face, force: Bool = false) {
+        let f = V3Assets.has(f) ? f : .smile
         guard force || f != face else { return }
         face = f
         let img = V3Assets.face(f)
@@ -148,7 +156,7 @@ final class V3Figure {
         let now = Date()
         if action != nil, now.timeIntervalSince(actionStart) >= actionLength {
             action = nil
-            setFace(baseFace())
+            if now >= holdUntil { setFace(baseFace()) }       // keep a face that show() is still holding
         }
         // Swap to another expression of the current state every 6–12 seconds.
         if action == nil && now >= holdUntil && now >= idleFaceAt {

@@ -156,8 +156,13 @@ function taskText() {
 
 // ------------------------------------------------------------------ expressions (v3 only)
 
-const V3_POOLS = { idle: ['smile', 'giggle', 'smile', 'shy', 'giggle', 'calm'], working: ['smile', 'giggle', 'serious', 'smile', 'calm'],
-  waiting: ['surprised', 'smile', 'shy'], strained: ['pout', 'smile', 'surprised'], crushed: ['aggrieved', 'pout', 'surprised'], sleepy: ['giggle', 'calm', 'shy'] };
+// 16 expressions (the second eight are optional: a face whose picture is missing is never picked).
+const hasFace = (f) => fs.existsSync(asset('gpt-v3', `face_${f}.png`));
+const V3_POOLS = Object.fromEntries(Object.entries({
+  idle: ['smile', 'giggle', 'smile', 'shy', 'giggle', 'calm', 'wink', 'excited'], working: ['smile', 'giggle', 'serious', 'smile', 'calm', 'thinking', 'thinking'],
+  waiting: ['surprised', 'smile', 'shy', 'thinking'], strained: ['pout', 'smile', 'surprised', 'thinking', 'angry'],
+  crushed: ['aggrieved', 'pout', 'surprised', 'crying', 'dizzy'], sleepy: ['giggle', 'calm', 'shy', 'sleepy', 'sleepy'],
+}).map(([k, v]) => [k, v.filter(hasFace)]));
 const V3_REACT = { taskDone: 'giggle', hop: 'giggle', petted: 'shy', oops: 'aggrieved', needsYou: 'surprised', taskStarted: 'serious',
   greet: 'smile', clicked: 'smile', care: 'smile', night: 'calm', farewell: 'smile' };
 let reactionUntil = 0, v3Next = 0, nextChatter = Date.now() + 10e3, lastNudge = 0, bubbleTimer = null;
@@ -172,6 +177,14 @@ function v3State() {
   const h = new Date().getHours();
   return h >= 1 && h < 6 ? 'sleepy' : 'idle';
 }
+/** Shows one of the v3 expressions for a while (interactions: dizzy, angry, wink, excited, eating, …). */
+function showFace(name, seconds) {
+  if (!hasFace(name)) return;
+  state.v3face = name;
+  v3Next = Math.max(v3Next, Date.now() + seconds * 1000);
+  broadcast();
+}
+
 function v3Rotate() {
   const pool = V3_POOLS[v3State()].filter((f) => f !== state.v3face);
   state.v3face = pool[Math.floor(Math.random() * pool.length)] || 'smile';
@@ -318,6 +331,7 @@ function stopFocus() {
   say(was ? '好吧，这次就先到这里～' : '那就继续加油吧！');
 }
 function remind(kind, text, title) {
+  if (kind === 'night') setTimeout(() => showFace('sleepy', 12), 50);
   forceShowUntil = Date.now() + 12e3;
   updateVisibility();
   react(kind, 12, null);
@@ -661,7 +675,7 @@ app.whenReady().then(async () => {
   setInterval(refreshIndex, 180e3);
   setInterval(() => { tickFace(); play?.tick(); updateVisibility(); }, 2000);
   duetLink = new DuetLink('codex', duetLines, canChat, () => ({ bounds: pet.getBounds(), visible: petVisible() }));
-  play = createPlay({ me: 'codex', say, react, quiet: () => !state.bubble, duet: duetLink, bounds: () => pet.getBounds(),
+  play = createPlay({ face: showFace, me: 'codex', say, react, quiet: () => !state.bubble, duet: duetLink, bounds: () => pet.getBounds(),
     vars: () => ({ five: state.usage?.fiveHour ? `${Math.round(state.usage.fiveHour.utilization)}%` : undefined, week: state.usage?.sevenDay ? `${Math.round(state.usage.sevenDay.utilization)}%` : undefined }), moods: () => [mood()] });
   duetLink.start();
   app.on('before-quit', () => duetLink.stop());

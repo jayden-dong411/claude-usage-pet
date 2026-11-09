@@ -2,3 +2,4 @@ GPT娘（白龙娘·成年） — v3 figure cut from github.com/lmy414/ai-chan-s
 Character design: ZipZipPipe (space.bilibili.com/4168597). Sheets: lmy414, CC BY-NC-SA 4.0.
 Background removed and resized for a desktop pet. Non-commercial use only.
 These 8 expressions are whole portraits redrawn by AI (Codex image generation, 2026-11) from the sheet crops, so the hair that the crops cut off at the sides continues naturally; background removed, bottom faded.
+face_sleepy / excited / angry / crying / thinking / wink / eating / dizzy (v1.6): drawn by AI (Codex image generation, 2026-11) in the style of the eight above, as whole portraits.

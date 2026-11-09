@@ -115,6 +115,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, NSW
         }
         model.onTaskResumed = { [weak self] s in self?.play.resumed(s.name) }
         play.say = { [weak self] t, s in self?.say(t, seconds: s) }
+        play.face = { [weak self] n, s in if let f = V3Face(rawValue: n) { self?.v3?.show(f, seconds: s) } }
         play.react = { [weak self] m, s in if let mood = Mood(rawValue: m) { self?.react(mood, seconds: s) } }
         play.quiet = { [weak self] in self?.bubble.isHidden ?? false }
         play.vars = { [weak self] in self?.banterVars() ?? [:] }
@@ -824,6 +825,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, NSW
         updateVisibility()
         react(mood, seconds: 12, say: nil)
         say(e.text, seconds: 12)
+        if e.kind == "night" { v3?.show(.sleepy, seconds: 12) }
     }
 
     func hubDuet(_ lines: [DuetLine], total: Double) {

@@ -15,6 +15,8 @@ final class PetPlay: NSObject {
     var say: (String, Double) -> Void = { _, _ in }
     /// Plays a reaction by mood name (Mood raw values: "oops", "hop", "petted", "clicked", "greet", "taskDone").
     var react: (String, Double) -> Void = { _, _ in }
+    /// Shows one of the v3 expressions for a while ("dizzy", "angry", "wink", "excited", "eating", …).
+    var face: (String, Double) -> Void = { _, _ in }
     /// True when nothing else is being said, so small talk doesn't cut into reminders.
     var quiet: () -> Bool = { true }
     /// Values for {five} {week} … in chatter.
@@ -48,6 +50,7 @@ final class PetPlay: NSObject {
 
     func shaken() {
         react("oops", 3)
+        face("dizzy", 3.5)
         if let l = line("dizzy") { say(l, 3) }
     }
 
@@ -58,6 +61,7 @@ final class PetPlay: NSObject {
         guard hops.count >= 3 else { return false }
         hops.removeAll()
         react("oops", 3)
+        face("angry", 3)
         if let l = line("poked") { say(l, 3) }
         return true
     }
@@ -66,6 +70,7 @@ final class PetPlay: NSObject {
         guard Date().timeIntervalSince(lastHover) > 45, quiet() else { return }
         lastHover = Date()
         react("clicked", 2.5)
+        face("wink", 3)
         if let l = line("hover") { say(l, 3) }
     }
 
@@ -73,6 +78,7 @@ final class PetPlay: NSObject {
 
     /// A session that was waiting for you is working again.
     func resumed(_ name: String) {
+        face("wink", 3)
         if let l = line("thanks") { say(l, 3.5) }
     }
 
@@ -83,6 +89,7 @@ final class PetPlay: NSObject {
         if away && idle < 3 {
             away = false
             react("greet", 3)
+            face("excited", 4)
             if let l = line("welcomeBack") { say(l, 4) }
         }
     }
@@ -116,10 +123,12 @@ final class PetPlay: NSObject {
         meals = meals.filter { now.timeIntervalSince($0) < 3600 } + [now]
         if meals.count > 5 {
             react("oops", 3)
+            face("dizzy", 3)
             if let l = line("full") { say(l, 3) }
             return
         }
         react(f.fav ? "taskDone" : "petted", 3)
+        face(f.fav ? "eating" : "excited", 3.5)          // her favourite: she's drawn eating it
         if let l = line(f.fav ? "favFed" : "fed", ["food": f.name]) { say(l, 3.5) }
     }
 
