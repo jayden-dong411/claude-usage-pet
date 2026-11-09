@@ -102,6 +102,6 @@ def main(char_dir: Path, out: Path):
 if __name__ == "__main__":
     if len(sys.argv) > 4:
         THR, SPREAD = int(sys.argv[3]), int(sys.argv[4])
-    # Note: for Claude娘, Grok娘 and GPT娘 the hair cut off at the crop's left/right edges was afterwards
-    # extended by AI outpainting (see Assets/v3/SOURCE.txt); re-running this tool gives the plain crops.
+    # Note: for Claude娘, Grok娘 and GPT娘 the shipped expressions are whole portraits redrawn by AI from these
+    # crops, so the hair the crops cut off continues (see Assets/v3/SOURCE.txt); re-running this gives the plain crops.
     main(Path(sys.argv[1]), Path(sys.argv[2]))
