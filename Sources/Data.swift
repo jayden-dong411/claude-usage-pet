@@ -231,7 +231,8 @@ final class WebUsageFetcher: NSObject, WKNavigationDelegate {
     }
 
     private static let script = """
-    const acc = await fetch('/api/account', {credentials: 'include', headers: {accept: 'application/json'}});
+    const limit = () => { const c = new AbortController(); setTimeout(() => c.abort(), 20000); return c.signal; };
+    const acc = await fetch('/api/account', {credentials: 'include', headers: {accept: 'application/json'}, signal: limit()});
     if (!acc.ok) return JSON.stringify({error: 'auth', status: acc.status});
     const a = await acc.json();
     const ms = a.memberships || [];
@@ -249,15 +250,24 @@ final class WebUsageFetcher: NSObject, WKNavigationDelegate {
     }
     if (!org && ms.length) org = ms[0].organization;
     if (!org) return JSON.stringify({error: 'noorg'});
-    const u = await fetch('/api/organizations/' + org.uuid + '/usage', {credentials: 'include', headers: {accept: 'application/json'}});
+    const u = await fetch('/api/organizations/' + org.uuid + '/usage', {credentials: 'include', headers: {accept: 'application/json'}, signal: limit()});
     if (!u.ok) return JSON.stringify({error: 'usage', status: u.status});
     return JSON.stringify({email: a.email_address, org: org.name, caps: org.capabilities || [], usage: await u.json()});
     """
 
     func fetch(preferOrg: String? = nil) async throws -> UsageSnapshot {
         do { try await ensureLoaded() } catch { loaded = false; throw error }
-        let raw = try await webView.callAsyncJavaScript(Self.script, arguments: ["preferOrg": preferOrg ?? ""],
-                                                        in: nil, contentWorld: .page)
+        let raw: Any?
+        do {
+            raw = try await withTimeLimit(30) { [webView] in
+                try await webView.callAsyncJavaScript(Self.script, arguments: ["preferOrg": preferOrg ?? ""], in: nil, contentWorld: .page)
+            }
+        } catch {
+            // A page that stopped answering is reloaded next time.
+            loaded = false
+            webView.stopLoading()
+            throw error
+        }
         guard let s = raw as? String, let d = s.data(using: .utf8),
               let obj = try JSONSerialization.jsonObject(with: d) as? [String: Any] else { throw UsageError.badResponse }
         if let err = obj["error"] as? String {
@@ -281,6 +291,29 @@ final class WebUsageFetcher: NSObject, WKNavigationDelegate {
     static func logout() async {
         let store = WKWebsiteDataStore.default()
         await store.removeData(ofTypes: WKWebsiteDataStore.allWebsiteDataTypes(), modifiedSince: .distantPast)
+    }
+}
+
+// MARK: - Time limits
+
+/// Runs `op` on the main actor but gives up after `seconds` with `UsageError.timeout`. Every network step of a
+/// refresh goes through this: a single request that never answers (after sleep, a network or proxy switch)
+/// used to keep `loadingUsage` set for good, so the usage stopped updating until the app was restarted.
+@MainActor
+func withTimeLimit<T>(_ seconds: Double, _ op: @escaping @MainActor () async throws -> T) async throws -> T {
+    try await withCheckedThrowingContinuation { (c: CheckedContinuation<T, Error>) in
+        var finished = false
+        let task = Task { @MainActor in
+            do {
+                let v = try await op()
+                if !finished { finished = true; c.resume(returning: v) }
+            } catch {
+                if !finished { finished = true; c.resume(throwing: error) }
+            }
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + seconds) {
+            if !finished { finished = true; task.cancel(); c.resume(throwing: UsageError.timeout) }
+        }
     }
 }
 

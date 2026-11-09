@@ -79,6 +79,16 @@ final class AppModel: ObservableObject {
         timers.append(Timer.scheduledTimer(withTimeInterval: 90, repeats: true) { [weak self] _ in
             Task { @MainActor in await self?.refreshUsage() }
         })
+        // After sleep the old page and connections are often dead: start over and refresh right away.
+        NSWorkspace.shared.notificationCenter.addObserver(forName: NSWorkspace.didWakeNotification, object: nil, queue: .main) { [weak self] _ in
+            Task { @MainActor in
+                guard let self else { return }
+                self.web.reset()
+                self.secondaryWeb = nil
+                try? await Task.sleep(nanoseconds: 5_000_000_000)      // let the network come back first
+                await self.refreshUsage()
+            }
+        }
         refreshCodex()
         timers.append(Timer.scheduledTimer(withTimeInterval: 45, repeats: true) { [weak self] _ in
             Task { @MainActor in self?.refreshCodex() }
@@ -118,9 +128,13 @@ final class AppModel: ObservableObject {
 
     // MARK: Usage — current account
 
+    private var loadingSince = Date.distantPast
+
     func refreshUsage() async {
-        if loadingUsage { return }
+        // A refresh still running after 2 minutes is stuck; don't let it block every later one.
+        if loadingUsage && Date().timeIntervalSince(loadingSince) < 120 { return }
         loadingUsage = true
+        loadingSince = Date()
         defer { loadingUsage = false }
         await refreshPrimary()
         await refreshSecondary()
@@ -130,13 +144,20 @@ final class AppModel: ObservableObject {
         var errors: [String] = []
 
         // 1) The Claude desktop app's claude.ai login (read-only; follows its current account).
-        let desktop = await Task.detached { () -> Result<[DesktopCookie], Error> in
-            Result(catching: { try DesktopLogin.readCookies() })
-        }.value
+        let desktop: Result<[DesktopCookie], Error>
+        do {
+            desktop = try await withTimeLimit(20) {
+                await Task.detached { () -> Result<[DesktopCookie], Error> in
+                    Result(catching: { try DesktopLogin.readCookies() })
+                }.value
+            }
+        } catch {
+            desktop = .failure(error)
+        }
         var importedDesktop = false
         switch desktop {
         case .success(let cookies):
-            await web.importCookies(cookies)
+            _ = try? await withTimeLimit(15) { [web] in await web.importCookies(cookies) }
             importedDesktop = true
             let org = cookies.first(where: { $0.name == "lastActiveOrg" })?.value
             do {
@@ -152,11 +173,11 @@ final class AppModel: ObservableObject {
         }
 
         // 2) Claude Code's own login (read-only, never refreshed or rewritten here).
-        let cred = await Task.detached { KeychainOAuth.read() }.value
+        let cred = (try? await withTimeLimit(15) { await Task.detached { KeychainOAuth.read() }.value }) ?? nil
         if let cred {
             if cred.expiresAt > Date().addingTimeInterval(30) {
                 do {
-                    apply(try await OAuthUsageAPI.fetch(cred))
+                    apply(try await withTimeLimit(30) { try await OAuthUsageAPI.fetch(cred) })
                     return
                 } catch {
                     errors.append("Claude Code 令牌：\(error.localizedDescription)")

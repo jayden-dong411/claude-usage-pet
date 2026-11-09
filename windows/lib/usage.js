@@ -30,7 +30,7 @@ function parseUsage(obj, source) {
 
 const SCRIPT = (preferOrg) => `(async () => {
   const preferOrg = ${JSON.stringify(preferOrg || '')};
-  const acc = await fetch('/api/account', {credentials: 'include', headers: {accept: 'application/json'}});
+  const acc = await fetch('/api/account', {credentials: 'include', headers: {accept: 'application/json'}, signal: AbortSignal.timeout(20000)});
   if (!acc.ok) return JSON.stringify({error: 'auth', status: acc.status});
   const a = await acc.json();
   const ms = a.memberships || [];
@@ -44,10 +44,16 @@ const SCRIPT = (preferOrg) => `(async () => {
   }
   if (!org && ms.length) org = ms[0].organization;
   if (!org) return JSON.stringify({error: 'noorg'});
-  const u = await fetch('/api/organizations/' + org.uuid + '/usage', {credentials: 'include', headers: {accept: 'application/json'}});
+  const u = await fetch('/api/organizations/' + org.uuid + '/usage', {credentials: 'include', headers: {accept: 'application/json'}, signal: AbortSignal.timeout(20000)});
   if (!u.ok) return JSON.stringify({error: 'usage', status: u.status});
   return JSON.stringify({email: a.email_address, org: org.name, caps: org.capabilities || [], usage: await u.json()});
 })()`;
+
+/** Rejects with 连接超时 when `promise` hasn't settled after `ms`. */
+function withTimeLimit(promise, ms) {
+  let t;
+  return Promise.race([promise, new Promise((_, rej) => { t = setTimeout(() => rej(new Error('连接超时')), ms); })]).finally(() => clearTimeout(t));
+}
 
 class WebFetcher {
   constructor(partition) { this.partition = partition; this.win = null; this.loaded = false; }
@@ -69,7 +75,11 @@ class WebFetcher {
 
   async fetch(preferOrg) {
     try { await this.ensure(); } catch (e) { this.loaded = false; throw e; }
-    const raw = await this.win.webContents.executeJavaScript(SCRIPT(preferOrg), true);
+    let raw;
+    try {
+      // A page that stops answering (after sleep, a network or proxy switch) must not hold the refresh forever.
+      raw = await withTimeLimit(this.win.webContents.executeJavaScript(SCRIPT(preferOrg), true), 30000);
+    } catch (e) { this.loaded = false; throw e; }
     const obj = JSON.parse(raw);
     if (obj.error === 'auth') throw new NotLoggedIn();
     if (obj.error) throw new Error(obj.error === 'noorg' ? '没有找到组织' : `请求失败 (HTTP ${obj.status})`);
@@ -108,6 +118,7 @@ async function fetchOAuth() {
   if ((o.expiresAt || 0) < Date.now() + 30e3) throw new Error('Claude Code 令牌已过期');
   const get = async (p) => {
     const r = await net.fetch('https://api.anthropic.com' + p, {
+      signal: AbortSignal.timeout(20000),
       headers: { Authorization: `Bearer ${o.accessToken}`, 'anthropic-beta': 'oauth-2025-04-20', 'User-Agent': 'ClaudeUsagePet/1.1' },
     });
     if (!r.ok) throw new Error(r.status === 401 ? '登录已失效 (401)' : `请求失败 (HTTP ${r.status})`);
@@ -204,4 +215,4 @@ async function readDesktopCookies() {
   } finally { try { fs.unlinkSync(tmp); } catch {} }
 }
 
-module.exports = { WebFetcher, fetchOAuth, readDesktopCookies, parseUsage, NotLoggedIn, CHROME_UA };
+module.exports = { withTimeLimit, WebFetcher, fetchOAuth, readDesktopCookies, parseUsage, NotLoggedIn, CHROME_UA };

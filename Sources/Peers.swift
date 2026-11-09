@@ -125,12 +125,16 @@ enum CodexLive {
         req.setValue("codex_cli_rs", forHTTPHeaderField: "User-Agent")
         let sem = DispatchSemaphore(value: 0)
         var body: Data?, status = 0
-        URLSession.shared.dataTask(with: req) { data, resp, _ in
+        // A fresh session each time: the shared one can keep a dead connection after a network or proxy switch,
+        // and every request then fails until the app restarts.
+        let session = URLSession(configuration: .ephemeral)
+        session.dataTask(with: req) { data, resp, _ in
             body = data
             status = (resp as? HTTPURLResponse)?.statusCode ?? 0
             sem.signal()
         }.resume()
         _ = sem.wait(timeout: .now() + 25)
+        session.invalidateAndCancel()
         guard status == 200, let body, let j = try? JSONSerialization.jsonObject(with: body) as? [String: Any],
               let rl = j["rate_limit"] as? [String: Any] else {
             return fail(status == 401 || status == 403 ? "Codex 登录已过期，打开一次 ChatGPT 里的 Codex 就会自动续上"

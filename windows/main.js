@@ -5,7 +5,7 @@ const path = require('path');
 const { loadSessions, ProgressTracker, decorate } = require('./lib/sessions');
 const { UsageIndexer, dayKey } = require('./lib/indexer');
 const { UsageHistory } = require('./lib/history');
-const { WebFetcher, fetchOAuth, readDesktopCookies, CHROME_UA } = require('./lib/usage');
+const { WebFetcher, fetchOAuth, readDesktopCookies, CHROME_UA, withTimeLimit } = require('./lib/usage');
 const { Foreground } = require('./lib/foreground');
 const EXPR = require('./lib/expressions');
 const { readPeers, codexError, writePeer } = require('./lib/peers');
@@ -285,15 +285,17 @@ function applyUsage(snap) {
   broadcast();
 }
 
+let loadingSince = 0;
 async function refreshUsage() {
-  if (DEMO || state.loadingUsage) return;
-  state.loadingUsage = true; broadcast();
+  // A refresh still running after 2 minutes is stuck; don't let it block every later one.
+  if (DEMO || (state.loadingUsage && Date.now() - loadingSince < 120e3)) return;
+  state.loadingUsage = true; loadingSince = Date.now(); broadcast();
   const errors = [];
   try {
     let imported = false;
     try {
-      const cookies = await readDesktopCookies();
-      await primaryWeb.importCookies(cookies);
+      const cookies = await withTimeLimit(readDesktopCookies(), 20000);
+      await withTimeLimit(primaryWeb.importCookies(cookies), 15000);
       imported = true;
       const snap = await primaryWeb.fetch(cookies.find((c) => c.name === 'lastActiveOrg')?.value);
       snap.source = 'Claude 桌面版登录';
@@ -759,6 +761,8 @@ app.whenReady().then(async () => {
   setInterval(tickWellness, 2000);
   setInterval(() => refreshSessions(true), 3000);
   setInterval(refreshUsage, 90e3);
+  // After sleep the old page and connections are often dead: start over and refresh shortly after waking.
+  powerMonitor.on('resume', () => { primaryWeb.loaded = false; secondaryWeb.loaded = false; setTimeout(refreshUsage, 5000); });
   setInterval(refreshIndex, 180e3);
   setInterval(() => { tickFace(); tickChatter(); play?.tick(); updateVisibility(); }, 2000);
   duetLink = new DuetLink('claude', duetLines, canChat, () => ({ bounds: pet.getBounds(), visible: petVisible() }));

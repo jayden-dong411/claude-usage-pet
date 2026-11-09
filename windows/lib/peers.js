@@ -23,6 +23,7 @@ async function codexLive(fetchFn, maxAgeMs = 60e3) {
     const t = auth.tokens || {};
     if (!t.access_token) throw new Error('没有找到 Codex 登录');
     const r = await fetchFn('https://chatgpt.com/backend-api/wham/usage', {
+      signal: AbortSignal.timeout(20000),                // never wait forever (network or proxy switch)
       headers: { Authorization: `Bearer ${t.access_token}`, 'ChatGPT-Account-Id': t.account_id || '', Accept: 'application/json', 'User-Agent': 'codex_cli_rs' },
     });
     if (r.status === 401 || r.status === 403) throw new Error('Codex 登录已过期，打开一次 Codex 就会自动续上');

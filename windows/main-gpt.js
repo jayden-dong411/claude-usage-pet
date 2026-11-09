@@ -244,9 +244,11 @@ function refreshSessions(notifyChanges) {
 }
 
 /** Live limits from the ChatGPT account (the Codex login), falling back to the newest numbers in the local logs. */
+let loadingSince = 0;
 async function refreshUsage() {
-  if (DEMO || state.loadingUsage) return;
-  state.loadingUsage = true; broadcast();
+  // A refresh still running after 2 minutes is stuck; don't let it block every later one.
+  if (DEMO || (state.loadingUsage && Date.now() - loadingSince < 120e3)) return;
+  state.loadingUsage = true; loadingSince = Date.now(); broadcast();
   try {
     const live = await codexLive((url, opts) => net.fetch(url, opts), 50e3);
     const c = live || codexLogs();
@@ -631,6 +633,7 @@ app.whenReady().then(async () => {
   setInterval(tickWellness, 2000);
   setInterval(() => refreshSessions(true), 3000);
   setInterval(refreshUsage, 60e3);
+  powerMonitor.on('resume', () => setTimeout(refreshUsage, 5000));    // refresh shortly after waking
   setInterval(refreshIndex, 180e3);
   setInterval(() => { tickFace(); play?.tick(); updateVisibility(); }, 2000);
   duetLink = new DuetLink('codex', duetLines, canChat, () => ({ bounds: pet.getBounds(), visible: petVisible() }));
