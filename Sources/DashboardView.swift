@@ -82,8 +82,22 @@ struct DashboardView: View {
     private var series: [(date: Date, stats: DayStats)] { dm.series(range, source) }
     private var claudeSeries: [(date: Date, stats: DayStats)] { dm.series(range, .claude) }
     private var codexSeries: [(date: Date, stats: DayStats)] { dm.series(range, .codex) }
+    private var geminiSeries: [(date: Date, stats: DayStats)] { dm.series(range, .gemini) }
     private var stacked: Bool { source == .all }
-    private var sourceTitle: String { source == .claude ? "Claude Code" : source == .codex ? "Codex" : "Claude + Codex" }
+    private var sourceTitle: String {
+        switch source {
+        case .claude: return "Claude Code"
+        case .codex: return "Codex"
+        case .gemini: return "Gemini"
+        case .all: return "Claude + Codex + Gemini"
+        }
+    }
+    /// One bar segment per tool and day in the combined charts.
+    private var stackParts: [(name: String, date: Date, stats: DayStats)] {
+        [("Claude", claudeSeries), ("Codex", codexSeries), ("Gemini", geminiSeries)].flatMap { name, s in
+            s.map { (name: name, date: $0.date, stats: $0.stats) }
+        }
+    }
 
     var body: some View {
         ScrollView {
@@ -113,7 +127,7 @@ struct DashboardView: View {
                     breakdown("按项目", tint: VizColor.tokens,
                               rows: dm.total(range, source).projects.map { ($0.key, $0.value.tokens.total, $0.value.activeSeconds) })
                 }
-                Text("数据来自这台 Mac 上的本地记录：Claude Code 读 ~/.claude/projects（桌面版和终端都算），Codex 读 ~/.codex/sessions（ChatGPT 桌面版和 Codex CLI 都算），不含其他设备和网页版聊天。Codex 的「输入」指未命中缓存的输入。活跃时长按同一会话里相邻两条记录间隔不超过 5 分钟累计；几个会话同时在跑时各自计时再相加，所以可能比实际经过的时间长。")
+                Text("数据来自这台 Mac 上的本地记录：Claude Code 读 ~/.claude/projects（桌面版和终端都算），Codex 读 ~/.codex/sessions（ChatGPT 桌面版和 Codex CLI 都算），Gemini 读 Antigravity 本机服务里的对话（Antigravity 打开时更新，读过的会留着），不含其他设备和网页版聊天。Codex 的「输入」指未命中缓存的输入。活跃时长按同一会话里相邻两条记录间隔不超过 5 分钟累计；几个会话同时在跑时各自计时再相加，所以可能比实际经过的时间长。")
                     .font(.caption2).foregroundStyle(.tertiary)
             }
             .padding(20)
@@ -143,7 +157,7 @@ struct DashboardView: View {
             }
             .pickerStyle(.segmented).labelsHidden().fixedSize()
             .controlSize(.large)
-            .help("切换统计来源：Claude Code、Codex（ChatGPT）或两者合计")
+            .help("切换统计来源：Claude Code、Codex（ChatGPT）、Gemini（Antigravity）或合计")
             if dm.indexing {
                 ProgressView(value: dm.progress).frame(width: 110)
                 Text(dm.lastIndexed == nil ? "首次统计 \(Int(dm.progress * 100))%" : "更新中…")
@@ -174,10 +188,10 @@ struct DashboardView: View {
         }
     }
 
-    /// "Claude x · Codex y" for one day in the combined charts.
+    /// "Claude x · Codex y · Gemini z" for one day in the combined charts.
     private func splitText(_ day: Date, _ f: (DayStats) -> String) -> String {
         let k = DashboardModel.key(day)
-        return "Claude \(f(dm.days[k] ?? DayStats())) · Codex \(f(dm.codexDays[k] ?? DayStats()))"
+        return "Claude \(f(dm.days[k] ?? DayStats())) · Codex \(f(dm.codexDays[k] ?? DayStats())) · Gemini \(f(dm.geminiDays[k] ?? DayStats()))"
     }
 
     private func axisDays() -> AxisMarkValues { .stride(by: .day, count: range > 14 ? 5 : (range > 7 ? 2 : 1)) }
@@ -200,20 +214,17 @@ struct DashboardView: View {
                 }
                 Chart {
                     if stacked {
-                        ForEach(Array(zip(claudeSeries, codexSeries).enumerated()), id: \.offset) { _, pair in
-                            BarMark(x: .value("日期", pair.0.date, unit: .day),
-                                    y: .value("Token", metric.value(pair.0.stats.tokens)), width: .ratio(0.62))
-                                .foregroundStyle(by: .value("来源", "Claude"))
-                            BarMark(x: .value("日期", pair.1.date, unit: .day),
-                                    y: .value("Token", metric.value(pair.1.stats.tokens)), width: .ratio(0.62))
-                                .foregroundStyle(by: .value("来源", "Codex"))
+                        ForEach(Array(stackParts.enumerated()), id: \.offset) { _, p in
+                            BarMark(x: .value("日期", p.date, unit: .day),
+                                    y: .value("Token", metric.value(p.stats.tokens)), width: .ratio(0.62))
+                                .foregroundStyle(by: .value("来源", p.name))
                         }
                     } else {
                         ForEach(series, id: \.date) { d in
                             BarMark(x: .value("日期", d.date, unit: .day),
                                     y: .value("Token", metric.value(d.stats.tokens)), width: .ratio(0.62))
                                 .cornerRadius(4)
-                                .foregroundStyle((source == .codex ? VizColor.codex : VizColor.tokens)
+                                .foregroundStyle((source == .codex ? VizColor.codex : source == .gemini ? VizColor.gemini : VizColor.tokens)
                                     .opacity(pickedTokenDay == nil || picked(pickedTokenDay)?.date == d.date ? 1 : 0.35))
                         }
                     }
@@ -226,7 +237,7 @@ struct DashboardView: View {
                             }
                     }
                 }
-                .chartForegroundStyleScale(["Claude": VizColor.tokens, "Codex": VizColor.codex])
+                .chartForegroundStyleScale(["Claude": VizColor.tokens, "Codex": VizColor.codex, "Gemini": VizColor.gemini])
                 .chartLegend(stacked ? .visible : .hidden)
                 .chartXSelection(value: $pickedTokenDay)
                 .chartYAxis { AxisMarks { v in
@@ -247,13 +258,10 @@ struct DashboardView: View {
                 Text("每天会话活跃时长").font(.subheadline.weight(.semibold))
                 Chart {
                     if stacked {
-                        ForEach(Array(zip(claudeSeries, codexSeries).enumerated()), id: \.offset) { _, pair in
-                            BarMark(x: .value("日期", pair.0.date, unit: .day),
-                                    y: .value("小时", pair.0.stats.activeSeconds / 3600), width: .ratio(0.62))
-                                .foregroundStyle(by: .value("来源", "Claude"))
-                            BarMark(x: .value("日期", pair.1.date, unit: .day),
-                                    y: .value("小时", pair.1.stats.activeSeconds / 3600), width: .ratio(0.62))
-                                .foregroundStyle(by: .value("来源", "Codex"))
+                        ForEach(Array(stackParts.enumerated()), id: \.offset) { _, p in
+                            BarMark(x: .value("日期", p.date, unit: .day),
+                                    y: .value("小时", p.stats.activeSeconds / 3600), width: .ratio(0.62))
+                                .foregroundStyle(by: .value("来源", p.name))
                         }
                     } else {
                         ForEach(series, id: \.date) { d in
@@ -272,7 +280,7 @@ struct DashboardView: View {
                             }
                     }
                 }
-                .chartForegroundStyleScale(["Claude": VizColor.tokens, "Codex": VizColor.codex])
+                .chartForegroundStyleScale(["Claude": VizColor.tokens, "Codex": VizColor.codex, "Gemini": VizColor.gemini])
                 .chartLegend(stacked ? .visible : .hidden)
                 .chartXSelection(value: $pickedTimeDay)
                 .chartYAxis { AxisMarks { v in

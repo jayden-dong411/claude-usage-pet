@@ -1,9 +1,9 @@
 #!/bin/zsh
-# Builds GPT龙娘, Grok娘 and DeepSeek娘 and zips each with an install guide into ../dist.
+# Builds GPT龙娘, Grok娘, DeepSeek娘 and Gemini娘 and zips each with an install guide into ../dist.
 # The GPT龙娘 sprite sheet has no open license, so the packages use the v3 look (EXCLUDE_DRAGON=1).
 set -euo pipefail
 cd "$(dirname "$0")"
-VERSION="${1:-$(cat "$(dirname "$0")/../VERSION")}"
+VERSION="${1:-$(cat ../VERSION)}"
 OUT="$(cd .. && pwd)/dist"
 mkdir -p "$OUT"
 pack() {   # dir app-name zip-name host-app data-note
@@ -35,3 +35,4 @@ TXT
 pack ChatGPTPet "GPT龙娘" "GPTDragonPet-v$VERSION-macOS.zip" "ChatGPT" "读取本机 Codex 的登录（~/.codex/auth.json，只读）向 ChatGPT 账号查实时额度；任务列表来自 ~/.codex。"
 pack GrokPet "Grok娘" "GrokPet-v$VERSION-macOS.zip" "Grok Bot" "Grok Bot 桌面版缓存在本机的每周额度和机器人列表。"
 pack DeepSeekPet "DeepSeek娘" "DeepSeekPet-v$VERSION-macOS.zip" "DeepSeek Harness" "DeepSeek Harness 记在本机的账户余额（~/.dsh），不读密钥、不联网。"
+pack GeminiPet "Gemini娘" "GeminiPet-v$VERSION-macOS.zip" "Antigravity" "Antigravity 打开时从它的本机服务读 Gemini 额度和对话（~/.gemini/antigravity，只读，不联网），关掉后显示最后一次读到的额度。"

@@ -19,7 +19,7 @@ for arch in arm64 x86_64; do
     -target $arch-apple-macos14.0 \
     -framework AppKit -framework SwiftUI -framework ServiceManagement -framework Charts \
     Sources/*.swift ../Companion/*.swift \
-    ../../Sources/{V3Figure,Peers,PetHub,PetChrome,Banter,PetPlay}.swift -o "$TMP/GrokPet-$arch"
+    ../../Sources/{V3Figure,Peers,GeminiLink,PetHub,PetChrome,Banter,PetPlay}.swift -o "$TMP/GrokPet-$arch"
 done
 lipo -create "$TMP/GrokPet-arm64" "$TMP/GrokPet-x86_64" -output "$APP/Contents/MacOS/GrokPet"
 

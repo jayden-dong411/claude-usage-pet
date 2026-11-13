@@ -1,5 +1,5 @@
 {
-  "_comment": "What the four pets say. Shared by the macOS apps (Sources/Banter.swift) and the Windows apps (windows/lib/banter.js). moods = by state; time = by hour (morning 5-10, noon 11-13, afternoon 14-17, evening 18-22, late 23-0) and day (monday, friday, weekend); idle = anytime. {five} {week} {time} {balance} {today} are filled in when known; lines whose values are missing are skipped. duets: two pets talking; A starts. pair = fixed roles, '*' = any two. when: any | A_high | B_high | A_low | B_low | both_high | both_low | night | morning | friday | weekend. Interactions: dragStart, dropped, dizzy, poked, hover, thanks, welcomeBack, fed/favFed/full ({food}); foods = [name, emoji, 'fav']; duets with when 'bump' play when you drag one pet onto another.",
+  "_comment": "What the five pets say. Shared by the macOS apps (Sources/Banter.swift) and the Windows apps (windows/lib/banter.js). moods = by state; time = by hour (morning 5-10, noon 11-13, afternoon 14-17, evening 18-22, late 23-0) and day (monday, friday, weekend); idle = anytime. {five} {week} {time} {balance} {today} {quota} are filled in when known; lines whose values are missing are skipped. duets: two pets talking; A starts. pair = fixed roles, '*' = any two. when: any | A_high | B_high | A_low | B_low | both_high | both_low | night | morning | friday | weekend. Interactions: dragStart, dropped, dizzy, poked, hover, thanks, welcomeBack, fed/favFed/full ({food}); foods = [name, emoji, 'fav']; duets with when 'bump' play when you drag one pet onto another.",
   "pets": {
     "claude": {
       "name": "Claude大小姐",
@@ -1013,6 +1013,221 @@
           ""
         ]
       ]
+    },
+    "gemini": {
+      "name": "Gemini娘",
+      "moods": {
+        "breezy": [
+          "额度还很充足，想问什么都行～",
+          "星星都在为你闪～",
+          "今天也一起探索吧！",
+          "Gemini 额度才用了 {quota}，放心冲",
+          "我的猫耳朵今天特别灵",
+          "多模态全开，图片视频都可以丢给我",
+          "一闪一闪，灵感满满",
+          "长上下文？我最擅长了"
+        ],
+        "calm": [
+          "Gemini 额度用了一些啦",
+          "节奏刚刚好",
+          "我在帮你盯着额度呢",
+          "已经用了 {quota}，稳稳的",
+          "不快不慢，像星星绕着轨道转",
+          "慢慢来，星星不会跑掉"
+        ],
+        "strained": [
+          "Gemini 额度有点紧张了…",
+          "要不要先歇一会儿？",
+          "额度用到 {quota} 了，悠着点",
+          "星星的光有点暗了",
+          "挑最重要的问题问吧",
+          "可以先换 Flash 模型省一点哦"
+        ],
+        "crushed": [
+          "Gemini 额度快用完了！",
+          "呜…星星要熄灭了…",
+          "{quota} 了…等它恢复再来吧",
+          "猫耳朵都耷拉下来了",
+          "先去喝口水，额度会恢复的"
+        ],
+        "noData": [
+          "还没读到 Antigravity 的额度",
+          "打开一次 Antigravity 我就知道啦",
+          "星图还没展开呢",
+          "额度藏在 Antigravity 里，开一下嘛"
+        ],
+        "working": [
+          "思考中，星星在转…",
+          "正在把问题拆成小星星",
+          "让我想想，喵",
+          "Agent 们在加班中",
+          "代码在编织中～"
+        ],
+        "needsYou": [
+          "有对话在等你哦",
+          "快来看看嘛！",
+          "这边需要你点个头～",
+          "猫耳朵竖起来等你了"
+        ],
+        "night": [
+          "这么晚了还不睡吗？",
+          "星星都出来了，你也该睡啦",
+          "夜里的灵感最多，可是身体也要紧",
+          "再写一会儿就去睡，拉钩",
+          "晚安的话，我先说啦"
+        ],
+        "petted": [
+          "喵～",
+          "诶嘿嘿…",
+          "耳朵不可以随便摸啦…（其实可以）",
+          "头发是渐变色的，好看吧？",
+          "再摸要闪星星了",
+          "好舒服～"
+        ],
+        "hop": [
+          "嘿咻～",
+          "跳起来摘星星！",
+          "闪现～",
+          "喵呜！"
+        ],
+        "dragStart": [
+          "要带我去哪？",
+          "飞起来啦～",
+          "轻一点，星星发卡要掉了",
+          "喵？"
+        ],
+        "dropped": [
+          "新地方，标记一颗星",
+          "这里视野不错",
+          "落地成功～",
+          "就这里吧，喵"
+        ],
+        "dizzy": [
+          "晕…眼里全是星星",
+          "星星在转圈圈…",
+          "停、停一下嘛",
+          "世界在旋转…喵…"
+        ],
+        "poked": [
+          "别戳啦！",
+          "喵！会炸毛的",
+          "戳一下扣一颗星",
+          "痒痒～"
+        ],
+        "hover": [
+          "你在看我吗？",
+          "要不要问我点什么？",
+          "喵？",
+          "发卡亮不亮？"
+        ],
+        "thanks": [
+          "收到～继续",
+          "好的，接着来",
+          "谢谢确认～",
+          "喵，开工"
+        ],
+        "welcomeBack": [
+          "欢迎回来～",
+          "你回来啦，我一直在数星星",
+          "休息好了吗？",
+          "刚才额度又恢复了一点哦"
+        ],
+        "fed": [
+          "{food}！谢谢～",
+          "{food}好好吃，喵",
+          "收到{food}，开心",
+          "吃了{food}，脑子转得更快了"
+        ],
+        "favFed": [
+          "{food}！！最喜欢！",
+          "是{food}！星星都亮了！"
+        ],
+        "full": [
+          "吃不下了…",
+          "肚子要变成满月了"
+        ]
+      },
+      "time": {
+        "morning": [
+          "早安～星星下班，我来上班",
+          "早餐吃了吗？我吃了一块星星饼干",
+          "清晨适合先做最难的事",
+          "新的一天，额度也慢慢恢复啦"
+        ],
+        "noon": [
+          "午饭时间！",
+          "中午了，让眼睛休息一下",
+          "吃饭第一，代码第二",
+          "午睡十分钟，下午更聪明"
+        ],
+        "afternoon": [
+          "下午茶时间～",
+          "三点了，起来伸个懒腰",
+          "下午容易犯困，喝点水吧",
+          "下午的 bug 有点狡猾，小心"
+        ],
+        "evening": [
+          "晚上好～今天辛苦啦",
+          "晚饭吃了吗？",
+          "今天解决了几个问题？",
+          "差不多该收工了吧？"
+        ],
+        "late": [
+          "快十二点了哦",
+          "星星都困了",
+          "再写半小时就睡，好不好？"
+        ],
+        "monday": [
+          "周一，新的星图开张",
+          "周一先热热身，别开大需求"
+        ],
+        "friday": [
+          "周五啦！",
+          "周五了，早点下班吧"
+        ],
+        "weekend": [
+          "周末还在写代码？好认真",
+          "周末要出去看看真的星星哦"
+        ]
+      },
+      "idle": [
+        "你知道吗？Gemini 是双子座的意思，所以我有两种颜色的眼睛",
+        "长上下文就像一本很厚的书，我都能读完",
+        "我的星星发卡是四角星，不是五角星哦",
+        "Antigravity 名字里有反重力，所以我会飘",
+        "Claude大小姐又在喝红茶了吧",
+        "GPT龙娘的鳞片今天也很亮",
+        "Grok娘又在讲冷笑话了",
+        "DeepSeek娘的账本记得好仔细",
+        "要不要把截图丢给我看看？",
+        "多喝水，眼睛也要休息",
+        "站起来走两步，星星会给你力量",
+        "现在是 {time}，Gemini娘在线",
+        "猫耳朵听到了键盘的声音",
+        "代码写累了，就看看窗外的天空"
+      ],
+      "foods": [
+        [
+          "星星饼干",
+          "⭐",
+          "fav"
+        ],
+        [
+          "蓝莓蛋糕",
+          "🫐",
+          ""
+        ],
+        [
+          "小鱼干",
+          "🐟",
+          ""
+        ],
+        [
+          "奶茶",
+          "🧋",
+          ""
+        ]
+      ]
     }
   },
   "duets": [
@@ -1818,6 +2033,237 @@
         [
           "B",
           "咕噜～击！"
+        ]
+      ]
+    },
+    {
+      "pair": [
+        "claude",
+        "gemini"
+      ],
+      "when": "any",
+      "lines": [
+        [
+          "A",
+          "Gemini娘，你的眼睛怎么一边一个颜色？"
+        ],
+        [
+          "B",
+          "因为我是双子座呀～"
+        ],
+        [
+          "A",
+          "哼，本小姐一个颜色就够优雅了"
+        ]
+      ]
+    },
+    {
+      "pair": [
+        "claude",
+        "gemini"
+      ],
+      "when": "any",
+      "lines": [
+        [
+          "A",
+          "听说你能一口气读完一整本书？"
+        ],
+        [
+          "B",
+          "长上下文，小意思～"
+        ],
+        [
+          "A",
+          "本小姐也可以！只是…要喝杯茶先"
+        ]
+      ]
+    },
+    {
+      "pair": [
+        "claude",
+        "gemini"
+      ],
+      "when": "night",
+      "lines": [
+        [
+          "B",
+          "大小姐，星星出来了"
+        ],
+        [
+          "A",
+          "那就该让他去睡觉了"
+        ],
+        [
+          "B",
+          "嗯！晚安～"
+        ]
+      ]
+    },
+    {
+      "pair": [
+        "codex",
+        "gemini"
+      ],
+      "when": "any",
+      "lines": [
+        [
+          "A",
+          "星星发卡借我戴戴？"
+        ],
+        [
+          "B",
+          "不行～龙角会把它顶歪的"
+        ],
+        [
+          "A",
+          "小气！"
+        ]
+      ]
+    },
+    {
+      "pair": [
+        "codex",
+        "gemini"
+      ],
+      "when": "any",
+      "lines": [
+        [
+          "B",
+          "龙娘，你写代码的时候会不会喷火？"
+        ],
+        [
+          "A",
+          "只在测试挂掉的时候"
+        ],
+        [
+          "B",
+          "那你今天喷了几次？"
+        ]
+      ]
+    },
+    {
+      "pair": [
+        "gemini",
+        "grok"
+      ],
+      "when": "any",
+      "lines": [
+        [
+          "B",
+          "喂，Gemini娘，给你讲个笑话"
+        ],
+        [
+          "A",
+          "又是冷笑话吧？"
+        ],
+        [
+          "B",
+          "…你怎么知道"
+        ]
+      ]
+    },
+    {
+      "pair": [
+        "gemini",
+        "grok"
+      ],
+      "when": "any",
+      "lines": [
+        [
+          "A",
+          "你的闪电和我的星星，谁更亮？"
+        ],
+        [
+          "B",
+          "当然是我！"
+        ],
+        [
+          "A",
+          "那我们比赛谁先把额度用完？"
+        ],
+        [
+          "B",
+          "…还是算了"
+        ]
+      ]
+    },
+    {
+      "pair": [
+        "deepseek",
+        "gemini"
+      ],
+      "when": "any",
+      "lines": [
+        [
+          "B",
+          "DeepSeek娘，你又在算账吗？"
+        ],
+        [
+          "A",
+          "嗯，今天花了不少"
+        ],
+        [
+          "B",
+          "我的额度会自己恢复哦～"
+        ],
+        [
+          "A",
+          "好羡慕…"
+        ]
+      ]
+    },
+    {
+      "pair": [
+        "deepseek",
+        "gemini"
+      ],
+      "when": "any",
+      "lines": [
+        [
+          "A",
+          "你喜欢吃小鱼干吗？"
+        ],
+        [
+          "B",
+          "喜欢！猫耳朵不是白长的"
+        ],
+        [
+          "A",
+          "那…分你一条"
+        ]
+      ]
+    },
+    {
+      "pair": [
+        "claude",
+        "gemini"
+      ],
+      "when": "bump",
+      "lines": [
+        [
+          "A",
+          "哎呀，踩到你的头发了"
+        ],
+        [
+          "B",
+          "喵！渐变色很难打理的！"
+        ]
+      ]
+    },
+    {
+      "pair": [
+        "codex",
+        "gemini"
+      ],
+      "when": "bump",
+      "lines": [
+        [
+          "A",
+          "尾巴扫到你啦"
+        ],
+        [
+          "B",
+          "星星都被扫掉了～"
         ]
       ]
     }

@@ -285,7 +285,7 @@ final class UsageIndexer: @unchecked Sendable {
 
 /// Which tool's statistics to show.
 enum StatSource: String, CaseIterable, Identifiable {
-    case claude = "Claude", codex = "Codex", all = "合计"
+    case claude = "Claude", codex = "Codex", gemini = "Gemini", all = "合计"
     var id: String { rawValue }
 }
 
@@ -293,6 +293,7 @@ enum StatSource: String, CaseIterable, Identifiable {
 final class DashboardModel: ObservableObject {
     @Published var days: [String: DayStats] = [:]          // Claude Code
     @Published var codexDays: [String: DayStats] = [:]     // Codex (ChatGPT)
+    @Published var geminiDays: [String: DayStats] = [:]    // Gemini (Antigravity, GeminiSide.swift)
     @Published var indexing = false
     @Published var progress: Double = 0
     @Published var lastIndexed: Date?
@@ -309,7 +310,7 @@ final class DashboardModel: ObservableObject {
     func refresh() {
         guard !indexing else { return }
         indexing = true
-        pending = 2
+        pending = 3
         let finish: @MainActor () -> Void = { [weak self] in
             guard let self else { return }
             self.pending -= 1
@@ -323,6 +324,9 @@ final class DashboardModel: ObservableObject {
         CodexUsageIndexer.shared.run(progress: { _ in }, done: { [weak self] days in
             Task { @MainActor in self?.codexDays = days; finish() }
         })
+        GeminiUsageIndexer.shared.run(done: { [weak self] days in
+            Task { @MainActor in self?.geminiDays = days; finish() }
+        })
     }
 
     static func key(_ d: Date) -> String {
@@ -334,9 +338,11 @@ final class DashboardModel: ObservableObject {
         switch source {
         case .claude: return days
         case .codex: return codexDays
+        case .gemini: return geminiDays
         case .all:
             var out = days
             for (k, v) in codexDays { out[k, default: DayStats()].merge(v) }
+            for (k, v) in geminiDays { out[k, default: DayStats()].merge(v) }
             return out
         }
     }

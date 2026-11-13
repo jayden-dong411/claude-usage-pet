@@ -1,0 +1,5 @@
+Gemini娘 — v3 figure from github.com/lmy414/ai-chan-sheets (10_Gemini娘).
+Character design: ZipZipPipe (space.bilibili.com/4168597). Sheets: lmy414, CC BY-NC-SA 4.0.
+Background removed and resized for a desktop pet. Non-commercial use only.
+The 8 sheet expressions (smile, calm, surprised, shy, pout, giggle, serious, aggrieved) are whole portraits redrawn by AI (Codex image generation, 2026-11) from the sheet crops, so the hair that the crops cut off at the sides continues naturally; background removed, bottom faded.
+face_sleepy / excited / angry / crying / thinking / wink / eating / dizzy: drawn by AI (Codex image generation, 2026-11) in the style of the eight above, as whole portraits.

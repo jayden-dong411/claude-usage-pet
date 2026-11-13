@@ -3,6 +3,9 @@
 //   falling back to the newest `rate_limits` in ~/.codex/sessions logs.
 // - Grok Bot: the desktop app's weekly-usage cache (<appData>/Grok Bot/sand-client-persistence).
 // - DeepSeek: the balance DeepSeek Harness keeps in ~/.dsh/.dshw-usage.json.
+// - Gemini: Google Antigravity's local language server (~/.gemini/antigravity/daemon/hub_*.json gives its port
+//   and token) answers GetUserStatus with every model's quota while Antigravity is open; the last reading is
+//   kept in gemini.json.
 const fs = require('fs');
 const path = require('path');
 const { home, isWin, isMac } = require('./paths');
@@ -159,6 +162,66 @@ function deepseek() {
   } catch { return null; }
 }
 
+// ---------------------------------------------------------------- Gemini (Antigravity)
+
+let geminiCache = { at: 0, value: null };
+
+function geminiEndpoint() {
+  const dir = path.join(home, '.gemini', 'antigravity', 'daemon');
+  let best = null;
+  let names = [];
+  try { names = fs.readdirSync(dir); } catch { return null; }
+  for (const n of names) {
+    if (!/^hub_.*\.json$/.test(n)) continue;
+    try {
+      const p = path.join(dir, n);
+      const o = JSON.parse(fs.readFileSync(p, 'utf8'));
+      if (!o.httpPort || !o.csrfToken || !o.pid) continue;
+      try { process.kill(o.pid, 0); } catch (e) { if (e.code !== 'EPERM') continue; }
+      const m = fs.statSync(p).mtimeMs;
+      if (!best || m > best.m) best = { m, port: o.httpPort, token: o.csrfToken };
+    } catch {}
+  }
+  return best;
+}
+
+/** Live Antigravity quotas (Gemini models first), or null when Antigravity isn't running. */
+async function geminiLive(maxAgeMs = 60e3) {
+  if (Date.now() - geminiCache.at < maxAgeMs) return geminiCache.value;
+  geminiCache.at = Date.now();
+  let value = null;
+  const ep = geminiEndpoint();
+  if (ep) {
+    try {
+      const r = await fetch(`http://127.0.0.1:${ep.port}/exa.language_server_pb.LanguageServerService/GetUserStatus`, {
+        method: 'POST', body: '{}', signal: AbortSignal.timeout(10000),
+        headers: { 'X-Codeium-Csrf-Token': ep.token, 'Connect-Protocol-Version': '1', 'Content-Type': 'application/json' },
+      });
+      const us = r.ok ? (await r.json()).userStatus || {} : {};
+      const configs = ((us.cascadeModelConfigData || {}).clientModelConfigs) || [];
+      const pools = { gemini: null, other: null };
+      for (const c of configs) {
+        if (!c.label || !c.quotaInfo) continue;
+        const left = Number(c.quotaInfo.remainingFraction) || 0;
+        const reset = c.quotaInfo.resetTime ? Date.parse(c.quotaInfo.resetTime) : null;
+        const k = /^(Gemini|Orchestrator)/.test(c.label) ? 'gemini' : 'other';
+        if (!pools[k] || left < pools[k].left) pools[k] = { left, reset };
+      }
+      const win = (label, p) => !p ? null : (p.reset && p.reset < Date.now())
+        ? { label, utilization: 0, resetsAt: null }
+        : { label, utilization: Math.max(0, Math.min(100, (1 - p.left) * 100)), resetsAt: p.reset };
+      const windows = [win('Gemini 模型', pools.gemini), win('Claude 等模型', pools.other)].filter(Boolean);
+      if (windows.length) {
+        value = { provider: 'gemini', title: 'Antigravity · Gemini', plan: (us.userTier || {}).name || null, observedAt: Date.now(),
+          windows, short: `Gemini ${Math.round(windows[0].utilization)}%` };
+        writePeer(value);
+      }
+    } catch { value = null; }
+  }
+  geminiCache = { at: Date.now(), value };
+  return value;
+}
+
 // ---------------------------------------------------------------- sharing between the pets
 // Same files and format as the macOS PeerStore: <appData>/AIPets/<provider>.json, dates in seconds.
 // Claude limits can only be fetched by the Claude pet (it holds the claude.ai login), so it writes
@@ -196,9 +259,10 @@ async function readPeers(fetchFn, exclude = 'claude') {
   }
   const g = grokBot(); if (g) out.push(g);
   const d = deepseek(); if (d) out.push(d);
+  if (exclude !== 'gemini') { const g2 = (await geminiLive()) || readPeer('gemini'); if (g2) out.push(g2); }
   return out;
 }
 
 const codexError = () => codexCache.error;
 
-module.exports = { readPeers, codexError, codexLive, codexLogs, writePeer, readPeer, shareDir };
+module.exports = { readPeers, codexError, codexLive, codexLogs, geminiLive, writePeer, readPeer, shareDir };

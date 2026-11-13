@@ -125,8 +125,8 @@
             : `<div class="row" style="margin-top:6px"><span class="meta">${U.esc(s.secondaryError || '读取中…')}</span><span class="spacer"></span><button class="btn" data-act="loginSecond">登录</button></div>`}</div>`;
     }
     if (open) for (const p of s.peers) {
-      const tint = { claude: '217,119,87', codex: '110,92,219', grok: '199,158,51', deepseek: '77,107,254' }[p.provider] || '150,150,150';
-      const icon = { claude: '✺', codex: '✦', grok: '⚡', deepseek: '🐟' }[p.provider] || '•';
+      const tint = { claude: '217,119,87', codex: '110,92,219', grok: '199,158,51', deepseek: '77,107,254', gemini: '107,92,242' }[p.provider] || '150,150,150';
+      const icon = { claude: '✺', codex: '✦', grok: '⚡', deepseek: '🐟', gemini: '✧' }[p.provider] || '•';
       const wins = p.windows.map((w) => `<div style="flex:1"><div class="row" style="font-size:12px"><span>${w.label}</span><span class="spacer"></span><b class="mono" style="color:${U.barColor(w.utilization)}">${Math.round(w.utilization)}%</b></div>
         <div class="bar thin" style="margin:3px 0"><i style="width:${Math.min(100, w.utilization)}%;background:${U.barColor(w.utilization)}"></i></div>
         <div class="meta">${w.resetsAt ? U.when(w.resetsAt) + ' 重置' : '还没开始计时'}</div></div>`).join('');

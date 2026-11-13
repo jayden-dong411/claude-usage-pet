@@ -2,7 +2,7 @@ import AppKit
 import ServiceManagement
 import SwiftUI
 
-// The app shell shared by GPT龙娘, Grok娘 and DeepSeek娘 (the Claude pet has its own, larger one).
+// The app shell shared by GPT龙娘, Grok娘, DeepSeek娘 and Gemini娘 (the Claude pet has its own, larger one).
 // Everything pet-specific comes from each app's `Spec` (Spec.swift) and its own AppModel /
 // SessionInfo / PanelView / Settings / Theme types, which this file uses by name:
 //   AppModel: sessions, busyCount, waitingSessions, level, now, frame, peers, onChange,

@@ -3,7 +3,7 @@ import Combine
 import SwiftUI
 import UserNotifications
 
-// Coordination between the four local pets (Claude大小姐, GPT龙娘, Grok娘, DeepSeek娘), which run as
+// Coordination between the five local pets (Claude大小姐, GPT龙娘, Grok娘, DeepSeek娘, Gemini娘), which run as
 // separate apps but should behave like one:
 // - One menu-bar item: only the "leader" (the first running pet in `PetHub.registry` order) shows it,
 //   with Claude's 5-hour limit; clicking it opens an overview of every provider.
@@ -13,10 +13,10 @@ import UserNotifications
 //   the pet whose host app is in front shows it (or the leader when none is).
 // - Shared settings (focus length, reminders, menu-bar item) in the "local.aipets.shared" defaults.
 // - "Open that pet's panel" requests travel as distributed notifications.
-// Compiled into all four apps.
+// Compiled into all five apps.
 
 struct PetInfo {
-    let id: String              // provider id: "claude" | "codex" | "grok" | "deepseek"
+    let id: String              // provider id: "claude" | "codex" | "grok" | "deepseek" | "gemini"
     let name: String
     let bundleID: String        // the pet app
     let hosts: [String]         // the AI app it sits on
@@ -174,6 +174,7 @@ final class PetHub: NSObject {
         PetInfo(id: "codex", name: "GPT龙娘", bundleID: "local.gptdragon.pet", hosts: ["com.openai.codex", "com.openai.chat"]),
         PetInfo(id: "grok", name: "Grok娘", bundleID: "local.grokchan.pet", hosts: ["com.anysphere.sand"]),
         PetInfo(id: "deepseek", name: "DeepSeek娘", bundleID: "local.deepseekchan.pet", hosts: ["com.deepseek.dsh"]),
+        PetInfo(id: "gemini", name: "Gemini娘", bundleID: "local.geminichan.pet", hosts: ["com.google.antigravity"]),
     ]
     static let fileURL = PeerStore.dir.appendingPathComponent("hub.json")
     private static let showPanelNote = Notification.Name("local.aipets.showPanel")
@@ -234,7 +235,7 @@ final class PetHub: NSObject {
         return leaderID
     }
 
-    /// True while any of the four AI apps (or a pet) is in front.
+    /// True while any of the five AI apps (or a pet) is in front.
     static var aiAppInFront: Bool {
         let front = NSWorkspace.shared.frontmostApplication?.bundleIdentifier ?? ""
         return registry.contains { $0.hosts.contains(front) || $0.bundleID == front }
@@ -368,6 +369,7 @@ final class PetHub: NSObject {
         case "claude": u = PeerStore.read("claude", maxAge: petStaleAfter)
         case "codex": u = PeerStore.read("codex", maxAge: petStaleAfter)
         case "grok": u = GrokBotPeer.read().flatMap { Date().timeIntervalSince($0.observedAt) < 6 * 3600 ? $0 : nil }   // weekly, cached by Grok Bot
+        case "gemini": u = PeerStore.read("gemini", maxAge: petStaleAfter)
         default: u = nil
         }
         return u?.windows.map(\.utilization).max()
@@ -638,7 +640,7 @@ struct HubOverview: View {
             }
             .font(.callout)
             Text("打开桌宠面板").font(.caption).foregroundStyle(.secondary)
-            HStack(spacing: 8) {
+            LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 8), count: 3), alignment: .leading, spacing: 8) {
                 ForEach(PetHub.registry, id: \.id) { p in
                     let installed = NSWorkspace.shared.urlForApplication(withBundleIdentifier: p.bundleID) != nil
                     Button(p.name) { PetHub.openPanel(of: p.id) }

@@ -693,7 +693,7 @@ ipcMain.handle('act', async (_e, name, ...a) => {
     case 'quit': return farewell();
     case 'setSetting': return setSetting(a[0], a[1]);
     case 'togglePeers': return setSetting('peersExpanded', !settings.peersExpanded);
-    case 'openPeer': return shell.openExternal({ codex: 'https://chatgpt.com/codex', grok: 'grokbot://', deepseek: 'https://platform.deepseek.com/usage' }[a[0]] || 'https://claude.ai');
+    case 'openPeer': return shell.openExternal({ codex: 'https://chatgpt.com/codex', grok: 'grokbot://', deepseek: 'https://platform.deepseek.com/usage', gemini: 'https://antigravity.google' }[a[0]] || 'https://claude.ai');
     case 'startFocus': return startFocus();
     case 'stopFocus': return stopFocus();
     case 'preset': return applyPreset(a[0], PRESET_LINES);

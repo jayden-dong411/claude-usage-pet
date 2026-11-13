@@ -13,6 +13,8 @@ import SwiftUI
 //   Grok Bot app, not the Grok Build CLI.
 // - DeepSeek has no rate limits but a prepaid balance, which DeepSeek Harness keeps in
 //   ~/.dsh/.dshw-usage.json (DeepSeekPeer.read).
+// - Gemini quotas come from Antigravity's local server while it runs (GeminiPeer in GeminiLink.swift),
+//   kept in gemini.json for when it's closed.
 // Compiled into all three apps, so every type here carries a Peer prefix.
 
 struct PeerWindow: Codable {
@@ -74,6 +76,7 @@ enum PeerStore {
         }
         if me != "grok", let g = GrokBotPeer.read() { out.append(g) }
         if me != "deepseek", let d = DeepSeekPeer.read() { out.append(d) }
+        if me != "gemini", let g = GeminiPeer.read() { out.append(g) }
         return out
     }
 }
@@ -347,6 +350,7 @@ struct PeerCard: View {
         case "claude": return Color(red: 0.85, green: 0.42, blue: 0.20)
         case "codex": return Color(red: 0.43, green: 0.36, blue: 0.86)
         case "deepseek": return Color(red: 0.30, green: 0.42, blue: 0.99)
+        case "gemini": return Color(red: 0.42, green: 0.36, blue: 0.95)
         default: return Color(red: 0.78, green: 0.62, blue: 0.20)
         }
     }
@@ -356,6 +360,7 @@ struct PeerCard: View {
         case "claude": return "asterisk"
         case "codex": return "sparkles"
         case "deepseek": return "fish.fill"
+        case "gemini": return "sparkle"
         default: return "bolt.fill"
         }
     }
@@ -367,6 +372,7 @@ struct PeerCard: View {
         case "claude": return ["com.anthropic.claudefordesktop"]
         case "codex": return ["com.openai.codex", "com.openai.chat"]
         case "deepseek": return ["com.deepseek.dsh"]
+        case "gemini": return ["com.google.antigravity"]
         default: return ["com.anysphere.sand"]
         }
     }

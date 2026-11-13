@@ -25,8 +25,9 @@
 | **GPT龙娘**（ChatGPT · Codex） | Windows 10 / 11（64 位） | `GPTDragonPet-Setup-…-win-x64.exe`（安装版）<br>`GPTDragonPet-…-win-x64-portable.zip`（免安装） | 🧪 测试版 |
 | **Grok娘**（Grok Bot） | macOS 14 及以上 | `GrokPet-…-macOS.zip` | ✅ 可用 |
 | **DeepSeek娘**（DeepSeek Harness） | macOS 14 及以上 | `DeepSeekPet-…-macOS.zip` | ✅ 可用 |
+| **Gemini娘**（Google Antigravity） | macOS 14 及以上 | `GeminiPet-…-macOS.zip` | ✅ 可用 |
 
-> Windows 版是用 Electron 重写的 Claude大小姐和 GPT龙娘，作者还没在 Windows 真机上完整测试过，遇到问题欢迎提 [Issue](../../issues)。Grok娘和 DeepSeek娘目前只有 Mac 版，见下方「另外三只桌宠」。
+> Windows 版是用 Electron 重写的 Claude大小姐和 GPT龙娘，作者还没在 Windows 真机上完整测试过，遇到问题欢迎提 [Issue](../../issues)。Grok娘、DeepSeek娘和 Gemini娘目前只有 Mac 版，见下方「另外四只桌宠」。
 
 ## 安装（Windows）
 
@@ -35,7 +36,7 @@
 3. 大小姐会出现在屏幕右下角，任务栏右下角的托盘里也有她的图标（右键托盘图标可以打开面板、设置或退出）。
 4. 用量会依次尝试：读取 Claude 桌面版的登录 → 读取 Claude Code 的登录（`%USERPROFILE%\.claude\.credentials.json`）→ 都不行时，在面板里点 **「登录 claude.ai 查看用量」** 单独登录一次（之后会记住）。
 
-> Windows 版也有：v3 小人、「其他额度」折叠区（Codex 实时额度、Grok Bot、DeepSeek 余额）、托盘悬停显示 5 小时额度、专注番茄钟、久坐 / 熬夜提醒、双击跳一下和摸头、说话频率和两只桌宠之间的聊天、用量统计里的 Claude / Codex / 合计切换。另外支持 **系统通知**——大小姐隐藏时（Claude 不在前台），任务完成、需要你批准或到点提醒都会弹出 Windows 通知。暂不支持：可动小人。
+> Windows 版也有：v3 小人、「其他额度」折叠区（Codex 实时额度、Grok Bot、DeepSeek 余额、Antigravity 的 Gemini 额度）、托盘悬停显示 5 小时额度、专注番茄钟、久坐 / 熬夜提醒、双击跳一下和摸头、说话频率和两只桌宠之间的聊天、用量统计里的 Claude / Codex / 合计切换。另外支持 **系统通知**——大小姐隐藏时（Claude 不在前台），任务完成、需要你批准或到点提醒都会弹出 Windows 通知。暂不支持：可动小人。
 
 **GPT龙娘（Windows）**：安装 `GPTDragonPet-Setup-…-win-x64.exe` 后，她默认站在大小姐左边，只在 ChatGPT / Codex 窗口在前台时出现。额度用这台电脑上 Codex 的登录（`%USERPROFILE%\.codex\auth.json`，只读）实时查询 ChatGPT 账号的 5 小时 / 每周额度，查不到时退回本机 Codex 日志；面板里有进行中的 Codex 线程（点开会跳到 ChatGPT 里的那个线程）、Codex 用量统计，「其他额度」里能看到 Claude（由 Windows 版大小姐共享过来）、Grok Bot 和 DeepSeek。形象是 v3 小人（GPT龙娘动画素材没有开放授权，不随安装包分发）。
 
@@ -86,7 +87,8 @@
   - **另一个账号**：可以再登录一个 claude.ai 账号，两个账号的限额同时显示；
   - **ChatGPT · Codex**（Mac 版）：从本机 Codex 会话记录里读出的 5 小时 / 每周额度；
   - **Grok Bot**（Mac 版）：Grok Bot 桌面版缓存在本机的每周额度；
-  - **DeepSeek**（Mac 版）：DeepSeek Harness 记在本机的账户余额、今天和近 7 天的花费。
+  - **DeepSeek**（Mac 版）：DeepSeek Harness 记在本机的账户余额、今天和近 7 天的花费；
+  - **Antigravity · Gemini**：Antigravity 打开时从它的本机服务读 Gemini 模型和其他模型（Claude 等）各自已用的比例和恢复时间，关掉后显示最后一次读到的。
 - **所有 Claude Code 会话**：进行中 / 等你确认 / 空闲、所在项目、持续时间、步骤进度条。**点击会话直接在 Claude 里打开它。**
 
 <br clear="right">
@@ -99,7 +101,7 @@
 - **今天**：使用时长、会话数、总 token、回复数、输入/输出、缓存读写。
 - **最近 7 / 14 / 30 天**：每天的 token（可切换 全部 / 输入+输出 / 缓存写入 / 缓存读取）和使用时长，悬停看数值。
 - 按模型、按项目的用量排行。
-- **Claude / Codex / 合计** 切换（Mac 版大小姐；Windows 版大小姐和 GPT龙娘都有）：合计模式下柱状图按来源叠加显示（Claude 橙色、Codex 紫色）。
+- **Claude / Codex / Gemini / 合计** 切换（Mac 版大小姐和 Gemini娘；Windows 版大小姐和 GPT龙娘有 Claude / Codex / 合计）：合计模式下柱状图按来源叠加显示（Claude 橙色、Codex 紫色、Gemini 青色）。
 
 <img src="docs/screenshots/dashboard-all.png" width="600" alt="合计模式（演示数据）">
 
@@ -111,22 +113,22 @@
 
 ### 模式和用量来源
 
-- **模式**：设置里或右键「模式」一键切换——默认（约 30 秒说一句，会聊天和提醒）、工作（少说话、不闲聊，重要的事照常提醒）、陪伴（常常说话，桌宠之间会聊天）、安静（不主动说话、不聊天、不发通知和健康提醒）。Mac 上四只桌宠共用。
+- **模式**：设置里或右键「模式」一键切换——默认（约 30 秒说一句，会聊天和提醒）、工作（少说话、不闲聊，重要的事照常提醒）、陪伴（常常说话，桌宠之间会聊天）、安静（不主动说话、不聊天、不发通知和健康提醒）。Mac 上五只桌宠共用。
 - **用量来源**（大小姐）：自动（桌面版 → Claude Code → 单独登录）/ 只用桌面版 / 只用 Claude Code / 只用在大小姐里单独登录的账号。桌面版的登录和单独登录分开保存、互不覆盖；在大小姐里登录后会自动切到「只用单独登录」。
 
 ### 16 种表情（v3 小人）
 
-四只桌宠的 v3 小人各有 16 种表情：原来的 8 种（微笑、平静、惊讶、害羞、鼓腮、轻笑、认真、委屈），加上 AI 按同样画风画的 8 种（困、兴奋、生气、哭哭、思考、眨眼、吃东西、晕）。
+五只桌宠的 v3 小人各有 16 种表情：原来的 8 种（微笑、平静、惊讶、害羞、鼓腮、轻笑、认真、委屈），加上 AI 按同样画风画的 8 种（困、兴奋、生气、哭哭、思考、眨眼、吃东西、晕）。
 平时按状态换表情（工作时常思考，额度快用完会哭，深夜犯困），互动时也会换脸：晃她会转晕、连戳会生气、鼠标停在她身上会眨眼、喂最爱的零食会拿着它开心地吃、离开回来会兴奋。
 
 ### 说话和聊天
 
-- 每只桌宠有自己的性格和台词（大小姐傲娇、龙娘温柔、Grok娘吐槽、DeepSeek娘精打细算），一共五百多句：按当前状态（额度充足 / 紧张 / 见底、有任务在跑、会话等你、深夜）、时间段（早上、午饭、下午茶、晚上、快半夜）、星期（周一、周五、周末）挑，偶尔插一句冷知识或玩笑，会带上实时的额度数字；说过的话要隔十几句才会再说。
+- 每只桌宠有自己的性格和台词（大小姐傲娇、龙娘温柔、Grok娘吐槽、DeepSeek娘精打细算、Gemini娘元气好奇），一共五百多句：按当前状态（额度充足 / 紧张 / 见底、有任务在跑、会话等你、深夜）、时间段（早上、午饭、下午茶、晚上、快半夜）、星期（周一、周五、周末）挑，偶尔插一句冷知识或玩笑，会带上实时的额度数字；说过的话要隔十几句才会再说。
 - **说话频率**：安静（约 90 秒一句）/ 适中（约 30 秒，默认）/ 话痨（约 15 秒）。
 - **桌宠之间聊天**：开着两只以上桌宠时，每隔 7–15 分钟（你在用电脑、没在专注时）会挑两只聊几句，另一只会出来一会儿再回去；会看彼此的额度说话，比如一只额度快用完时另一只说「交给我吧」。不想被打扰可以在设置里关掉。
-- **和她互动**（四只桌宠都有，Mac 和 Windows 都支持）：
+- **和她互动**（五只桌宠都有，Mac 和 Windows 都支持）：
   - 拖起来她会喊一声，放下会评价新位置；拖着来回晃会晕；连续双击三次会生气「别戳了！」；鼠标在她身上停两秒她会问你怎么了；摸头会害羞。
-  - 右键「投喂」：每只有自己的零食，喂到最爱的会特别开心（大小姐爱红茶、龙娘爱热可可、Grok娘爱冰美式、DeepSeek娘爱小鱼干），一小时喂太多会说吃不下。
+  - 右键「投喂」：每只有自己的零食，喂到最爱的会特别开心（大小姐爱红茶、龙娘爱热可可、Grok娘爱冰美式、DeepSeek娘爱小鱼干、Gemini娘爱星星饼干），一小时喂太多会说吃不下。
   - 右键「陪我聊聊」：马上说句话，或者讲个冷知识 / 笑话。
   - 你批准了等待中的会话，它继续干活时她会说「收到！继续～」；离开电脑 10 分钟以上回来时会说「欢迎回来」。
   - 把一只桌宠拖到另一只身上（两只都在屏幕上时），她们会互相打招呼、斗两句嘴。
@@ -200,26 +202,28 @@
 | Codex 额度和用量（Mac 版） | `~/.codex/sessions/**/rollout-*.jsonl`（ChatGPT 桌面版和 Codex CLI 写的本地记录）：额度取最新的 `rate_limits`，token 取累计 `token_count` 的增量 |
 | Grok Bot 额度（Mac 版） | Grok Bot 桌面版的本地缓存 `~/Library/Application Support/Grok Bot/sand-client-persistence/` 里的 `weekly-usage.cache`（每周已用百分比、重置时间、套餐名；Grok Bot 打开时才会更新） |
 | DeepSeek 余额（Mac 版） | DeepSeek Harness 的 `~/.dsh/.dshw-usage.json`（余额、每天花费；不读 API 密钥，不联网） |
+| Gemini 额度和用量 | Google Antigravity 自己的本机服务（`~/.gemini/antigravity/daemon/hub_*.json` 里有端口和本机令牌，只连 127.0.0.1）：`GetUserStatus` 给出每个模型的剩余比例和恢复时间，`GetCascadeTrajectory` 给出每次模型调用的 token。只在 Antigravity 打开时能读到，读过的统计和最后一次额度会留在本机 |
 | 和其他桌宠共享 | Mac 版把最新的 Claude 额度（只有百分比、重置时间和套餐名）写进 `~/Library/Application Support/AIPets/claude.json`；番茄钟状态在同目录的 `hub.json`；共用设置在 `local.aipets.shared` |
 | 本地缓存 | Mac：`~/Library/Application Support/ClaudeDaxiaojie/`；Windows：`%APPDATA%\ClaudeUsagePet\`（用量历史、统计缓存、设置） |
 
-只统计这台电脑上的 Claude Code（桌面版和终端都算）和 Codex，不包括其他设备、网页版聊天。
+只统计这台电脑上的 Claude Code（桌面版和终端都算）、Codex 和 Antigravity（Gemini），不包括其他设备、网页版聊天。
 
-### 另外三只桌宠（macOS）
+### 另外四只桌宠（macOS）
 
-同一套代码还做了三只桌宠，源码在 `companions/`，安装包在 Releases：
+同一套代码还做了四只桌宠，源码在 `companions/`，安装包在 Releases：
 
 | 桌宠 | 出现在 | 额度 / 数据 | 形象 |
 |---|---|---|---|
 | **GPT龙娘** | ChatGPT 桌面版（Codex） | 用本机 Codex 的登录（`~/.codex/auth.json`，只读）向 ChatGPT 账号查实时的 5 小时 / 每周额度；Codex 线程、每日 token 统计 | GPT娘（白龙娘）的 8 种表情；可选 GPT龙娘动画（`companions/ChatGPTPet/fetch-dragon.sh` 下载到本机，素材无开放授权，不随安装包分发） |
 | **Grok娘** | Grok Bot 桌面版 | Grok Bot 缓存在本机的每周额度；最近活跃的机器人 | Grok娘的 8 种表情 |
 | **DeepSeek娘** | DeepSeek Harness | 账户余额、今天 / 近 7 天花费、还能用几天；会话列表；用量统计窗口（每日花费、token、余额变化、按模型） | DeepSeek娘 Q版冬装 2 的 8 种表情 |
+| **Gemini娘** | Google Antigravity | Gemini 模型和其他模型的额度（已用比例、几点恢复）；最近的对话（进行中 / 空闲、工作区、步数）；用量统计窗口里 Gemini、Claude Code、Codex 和合计的每日 token、活跃时长、按模型 / 项目 | Gemini娘的 16 种表情（8 种原设定图表情由 AI 重画成完整半身像，另 8 种新画） |
 
-共用的部分：`companions/Companion/`（三只共用的主程序）、`Sources/PetHub.swift`（菜单栏、番茄钟、提醒的协调）、`Sources/Peers.swift`（各家额度）、`Sources/V3Figure.swift`、`Sources/PetChrome.swift`。几只同时运行时，按「Claude大小姐 → GPT龙娘 → Grok娘 → DeepSeek娘」的顺序由第一只在运行的桌宠显示菜单栏图标并负责计时；提醒由当前前台应用对应的那只桌宠弹出。每只都可以单独使用。
+共用的部分：`companions/Companion/`（四只共用的主程序）、`Sources/PetHub.swift`（菜单栏、番茄钟、提醒的协调）、`Sources/Peers.swift`（各家额度）、`Sources/V3Figure.swift`、`Sources/PetChrome.swift`。几只同时运行时，按「Claude大小姐 → GPT龙娘 → Grok娘 → DeepSeek娘 → Gemini娘」的顺序由第一只在运行的桌宠显示菜单栏图标并负责计时；提醒由当前前台应用对应的那只桌宠弹出。每只都可以单独使用。
 
 ```bash
-companions/ChatGPTPet/build.sh      # 或 GrokPet / DeepSeekPet
-companions/package.sh               # 三只的安装包 → dist/
+companions/ChatGPTPet/build.sh      # 或 GrokPet / DeepSeekPet / GeminiPet
+companions/package.sh               # 四只的安装包 → dist/
 ```
 
 ---
@@ -265,7 +269,7 @@ npm run dist:win:gpt            # 打包 GPT龙娘（配置在 build-gpt.json）
 | `lib/expressions.js` | 表情分组（由 `gen-expressions.py` 从 `Sources/Expressions.swift` 生成） |
 | `lib/play.js` | 互动：拖动、摇晃、连戳、悬停、投喂、陪聊、欢迎回来、两只桌宠相撞 |
 | `lib/banter.js` / `lib/duet.js` | 台词（读 `Assets/banter.json`）；两只 Windows 桌宠之间的聊天（通过 `%APPDATA%\AIPets` 里的文件） |
-| `lib/peers.js` | 「其他额度」：Codex 实时额度、Grok Bot、DeepSeek 余额；两只桌宠通过 `%APPDATA%\AIPets\*.json` 互相共享额度 |
+| `lib/peers.js` | 「其他额度」：Codex 实时额度、Grok Bot、DeepSeek 余额、Antigravity 的 Gemini 额度；两只桌宠通过 `%APPDATA%\AIPets\*.json` 互相共享额度 |
 | `renderer/` | 桌宠、面板、用量统计、设置四个界面 |
 
 ### 目录结构
@@ -288,6 +292,8 @@ Sources/
   CodexSide.swift      Codex 的每日用量统计
   V3Figure.swift       v3 小人：按状态切换 8 种表情
   Peers.swift          Codex / Grok Bot / DeepSeek 的额度读取和「其他额度」卡片
+  GeminiLink.swift     连 Antigravity 本机服务：Gemini 额度、对话列表
+  GeminiSide.swift     Gemini 的每日用量统计
   PetHub.swift         菜单栏总览、番茄钟和提醒（多只桌宠之间同步）
   PetChrome.swift      桌宠窗口里的视图（点击、双击、摸头、拖动），面板超出屏幕时滚动
   Banter.swift         读取台词库，按状态 / 时间挑一句；桌宠之间的对话
@@ -297,7 +303,7 @@ Tools/make_v3_assets.py     从 ai-chan-sheets 设定图切出 v3 表情并去�
 Tools/set-version.sh        统一设置版本号（VERSION 和 windows/package.json）
 Assets/daxiaojie/head/      80 张表情（CC BY-NC-SA 4.0）
 Assets/v3/                  v3 小人的 8 张表情（CC BY-NC-SA 4.0）
-Assets/banter.json          四只桌宠的台词和对话（Mac 和 Windows 共用）
+Assets/banter.json          五只桌宠的台词和对话（Mac 和 Windows 共用）
 ```
 
 ---
@@ -327,7 +333,7 @@ Assets/banter.json          四只桌宠的台词和对话（Mac 和 Windows 共
 ## 署名与许可
 
 - **代码**：[MIT License](LICENSE)。
-- **另外三只桌宠的形象**（`companions/*/Assets/v3/`）：ai-chan-sheets 里 GPT娘（白龙娘）、Grok娘、DeepSeek娘 Q版冬装 2 的设定图表情，补全部分 CC BY-NC-SA 4.0；原始角色设定 ZipZipPipe（DeepSeek娘 Q版冬装的来源图作者未标注）。
+- **另外四只桌宠的形象**（`companions/*/Assets/v3/`）：ai-chan-sheets 里 GPT娘（白龙娘）、Grok娘、DeepSeek娘 Q版冬装 2、Gemini娘的设定图表情，补全部分 CC BY-NC-SA 4.0；原始角色设定 ZipZipPipe（DeepSeek娘 Q版冬装的来源图作者未标注）。
 - **v3 小人**（`Assets/v3/`）：Claude娘设定图的 8 种表情 · 设定图：[lmy414/ai-chan-sheets](https://github.com/lmy414/ai-chan-sheets) · 角色设定：ZipZipPipe · [CC BY-NC-SA 4.0](https://creativecommons.org/licenses/by-nc-sa/4.0/deed.zh-hans)。本项目去掉了白底、缩小了尺寸，按同一协议发布，**不能用于商业用途**。
 - **形象图片**（`Assets/daxiaojie/`）：素材：Claude大小姐的日记本（[github.com/opsCar/claude-daxiaojie-assets](https://github.com/opsCar/claude-daxiaojie-assets)）· 角色设定：ZipZipPipe（胖次狐）· 设定图：lmy414/ai-chan-sheets · [CC BY-NC-SA 4.0](https://creativecommons.org/licenses/by-nc-sa/4.0/deed.zh-hans)。本项目只缩小了尺寸并在构建时去掉白色外框，按同一协议发布，**不能用于商业用途**。
 - 「Claude」是 Anthropic 的商标；本项目是非官方的粉丝作品。

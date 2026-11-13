@@ -13,6 +13,7 @@ enum VizColor {
     static let tokens = c(0xeb6834, 0xd95926)        // categorical slot 2 (orange)
     static let time = c(0x2a78d6, 0x3987e5)          // categorical slot 1 (blue)
     static let codex = c(0x6250d6, 0x9085e9)         // categorical slot 7 (violet), Codex in combined charts
+    static let gemini = c(0x14917f, 0x35b8a4)        // teal, Gemini in combined charts
     static let empty = c(0xe4e1da, 0x3b3a37)
     /// Heat steps 1...4, low to high.
     static let heat = [c(0xf39a63, 0x7a3a1a), c(0xeb6834, 0xa8481e), c(0xc4501f, 0xd95926), c(0x93391a, 0xf08a55)]
