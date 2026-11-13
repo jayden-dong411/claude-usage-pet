@@ -107,10 +107,10 @@ struct PanelView: View {
         v < 70 ? Color(red: 0.24, green: 0.70, blue: 0.48) : v < 90 ? .orange : alertRed
     }
 
-    private func bar(_ w: PeerWindow, big: Bool) -> some View {
+    private func bar(_ title: String, _ w: PeerWindow, big: Bool) -> some View {
         VStack(alignment: .leading, spacing: 4) {
             HStack(alignment: .firstTextBaseline) {
-                Text(w.label).font(big ? .subheadline.weight(.semibold) : .caption)
+                Text(title).font(big ? .subheadline.weight(.semibold) : .caption)
                 Spacer()
                 Text("已用 \(Int(w.utilization.rounded()))%")
                     .font((big ? Font.title3 : Font.caption).weight(.bold).monospacedDigit())
@@ -124,15 +124,25 @@ struct PanelView: View {
                 }
             }
             .frame(height: big ? 8 : 5)
-            Text(w.resetsAt.map { "\(Fmt.when($0)) 恢复（还有 \(Fmt.duration($0.timeIntervalSinceNow))）" } ?? "已恢复")
-                .font(.caption2).foregroundStyle(.secondary)
+            Text(w.resetsAt.map { big ? "\(Fmt.when($0)) 恢复（还有 \(Fmt.duration($0.timeIntervalSinceNow))）" : "\(Fmt.when($0)) 恢复" } ?? "已恢复")
+                .font(.caption2).foregroundStyle(.secondary).lineLimit(1).minimumScaleFactor(0.85)
         }
     }
 
     @ViewBuilder private var usageSection: some View {
         if let u = model.usage {
             VStack(alignment: .leading, spacing: 10) {
-                ForEach(Array(u.windows.enumerated()), id: \.offset) { i, w in bar(w, big: i == 0) }
+                if let five = model.gemini { bar("Gemini · 5 小时", five, big: true) }
+                if let week = model.week { bar("Gemini · 每周", week, big: true) }
+                if !model.otherWindows.isEmpty {
+                    Divider()
+                    Text("Claude / GPT 模型（另一组额度）").font(.caption.weight(.semibold)).foregroundStyle(.secondary)
+                    HStack(alignment: .top, spacing: 14) {
+                        ForEach(Array(model.otherWindows.enumerated()), id: \.offset) { _, w in
+                            bar(w.label.components(separatedBy: " · ").last ?? w.label, w, big: false)
+                        }
+                    }
+                }
                 Label(model.connected ? "Antigravity 实时额度 · \(Fmt.when(u.observedAt)) 读取"
                                       : "Antigravity 没开，显示 \(Fmt.when(u.observedAt)) 的额度",
                       systemImage: "clock")

@@ -36,7 +36,7 @@
 3. 大小姐会出现在屏幕右下角，任务栏右下角的托盘里也有她的图标（右键托盘图标可以打开面板、设置或退出）。
 4. 用量会依次尝试：读取 Claude 桌面版的登录 → 读取 Claude Code 的登录（`%USERPROFILE%\.claude\.credentials.json`）→ 都不行时，在面板里点 **「登录 claude.ai 查看用量」** 单独登录一次（之后会记住）。
 
-> Windows 版也有：v3 小人、「其他额度」折叠区（Codex 实时额度、Grok Bot、DeepSeek 余额、Antigravity 的 Gemini 额度）、托盘悬停显示 5 小时额度、专注番茄钟、久坐 / 熬夜提醒、双击跳一下和摸头、说话频率和两只桌宠之间的聊天、用量统计里的 Claude / Codex / 合计切换。另外支持 **系统通知**——大小姐隐藏时（Claude 不在前台），任务完成、需要你批准或到点提醒都会弹出 Windows 通知。暂不支持：可动小人。
+> Windows 版也有：v3 小人、「其他额度」折叠区（Codex 实时额度、Grok Bot、DeepSeek 余额、Antigravity 的 Gemini 5 小时 / 每周额度）、托盘悬停显示 5 小时额度、专注番茄钟、久坐 / 熬夜提醒、双击跳一下和摸头、说话频率和两只桌宠之间的聊天、用量统计里的 Claude / Codex / 合计切换。另外支持 **系统通知**——大小姐隐藏时（Claude 不在前台），任务完成、需要你批准或到点提醒都会弹出 Windows 通知。暂不支持：可动小人。
 
 **GPT龙娘（Windows）**：安装 `GPTDragonPet-Setup-…-win-x64.exe` 后，她默认站在大小姐左边，只在 ChatGPT / Codex 窗口在前台时出现。额度用这台电脑上 Codex 的登录（`%USERPROFILE%\.codex\auth.json`，只读）实时查询 ChatGPT 账号的 5 小时 / 每周额度，查不到时退回本机 Codex 日志；面板里有进行中的 Codex 线程（点开会跳到 ChatGPT 里的那个线程）、Codex 用量统计，「其他额度」里能看到 Claude（由 Windows 版大小姐共享过来）、Grok Bot 和 DeepSeek。形象是 v3 小人（GPT龙娘动画素材没有开放授权，不随安装包分发）。
 
@@ -88,7 +88,7 @@
   - **ChatGPT · Codex**（Mac 版）：从本机 Codex 会话记录里读出的 5 小时 / 每周额度；
   - **Grok Bot**（Mac 版）：Grok Bot 桌面版缓存在本机的每周额度；
   - **DeepSeek**（Mac 版）：DeepSeek Harness 记在本机的账户余额、今天和近 7 天的花费；
-  - **Antigravity · Gemini**：Antigravity 打开时从它的本机服务读 Gemini 模型和其他模型（Claude 等）各自已用的比例和恢复时间，关掉后显示最后一次读到的。
+  - **Gemini**（Antigravity）：Antigravity 打开时从它的本机服务读 Gemini 模型的 5 小时 / 每周限额，以及另一组模型（Claude、GPT-OSS）的 5 小时 / 每周限额和各自的恢复时间；关掉后显示最后一次读到的。
 - **所有 Claude Code 会话**：进行中 / 等你确认 / 空闲、所在项目、持续时间、步骤进度条。**点击会话直接在 Claude 里打开它。**
 
 <br clear="right">
@@ -202,7 +202,7 @@
 | Codex 额度和用量（Mac 版） | `~/.codex/sessions/**/rollout-*.jsonl`（ChatGPT 桌面版和 Codex CLI 写的本地记录）：额度取最新的 `rate_limits`，token 取累计 `token_count` 的增量 |
 | Grok Bot 额度（Mac 版） | Grok Bot 桌面版的本地缓存 `~/Library/Application Support/Grok Bot/sand-client-persistence/` 里的 `weekly-usage.cache`（每周已用百分比、重置时间、套餐名；Grok Bot 打开时才会更新） |
 | DeepSeek 余额（Mac 版） | DeepSeek Harness 的 `~/.dsh/.dshw-usage.json`（余额、每天花费；不读 API 密钥，不联网） |
-| Gemini 额度和用量 | Google Antigravity 自己的本机服务（`~/.gemini/antigravity/daemon/hub_*.json` 里有端口和本机令牌，只连 127.0.0.1）：`GetUserStatus` 给出每个模型的剩余比例和恢复时间，`GetCascadeTrajectory` 给出每次模型调用的 token。只在 Antigravity 打开时能读到，读过的统计和最后一次额度会留在本机 |
+| Gemini 额度和用量 | Google Antigravity 自己的本机服务（`~/.gemini/antigravity/daemon/hub_*.json` 里有端口和本机令牌，只连 127.0.0.1）：`RetrieveUserQuotaSummary` 给出每组模型的 5 小时 / 每周限额（剩余比例、恢复时间），`GetUserStatus` 给出套餐和模型名，`GetCascadeTrajectory` 给出每次模型调用的 token。只在 Antigravity 打开时能读到，读过的统计和最后一次额度会留在本机 |
 | 和其他桌宠共享 | Mac 版把最新的 Claude 额度（只有百分比、重置时间和套餐名）写进 `~/Library/Application Support/AIPets/claude.json`；番茄钟状态在同目录的 `hub.json`；共用设置在 `local.aipets.shared` |
 | 本地缓存 | Mac：`~/Library/Application Support/ClaudeDaxiaojie/`；Windows：`%APPDATA%\ClaudeUsagePet\`（用量历史、统计缓存、设置） |
 
@@ -217,7 +217,7 @@
 | **GPT龙娘** | ChatGPT 桌面版（Codex） | 用本机 Codex 的登录（`~/.codex/auth.json`，只读）向 ChatGPT 账号查实时的 5 小时 / 每周额度；Codex 线程、每日 token 统计 | GPT娘（白龙娘）的 8 种表情；可选 GPT龙娘动画（`companions/ChatGPTPet/fetch-dragon.sh` 下载到本机，素材无开放授权，不随安装包分发） |
 | **Grok娘** | Grok Bot 桌面版 | Grok Bot 缓存在本机的每周额度；最近活跃的机器人 | Grok娘的 8 种表情 |
 | **DeepSeek娘** | DeepSeek Harness | 账户余额、今天 / 近 7 天花费、还能用几天；会话列表；用量统计窗口（每日花费、token、余额变化、按模型） | DeepSeek娘 Q版冬装 2 的 8 种表情 |
-| **Gemini娘** | Google Antigravity | Gemini 模型和其他模型的额度（已用比例、几点恢复）；最近的对话（进行中 / 空闲、工作区、步数）；用量统计窗口里 Gemini、Claude Code、Codex 和合计的每日 token、活跃时长、按模型 / 项目 | Gemini娘的 16 种表情（8 种原设定图表情由 AI 重画成完整半身像，另 8 种新画） |
+| **Gemini娘** | Google Antigravity | Gemini 模型的 5 小时 / 每周限额，Claude / GPT 模型那一组的 5 小时 / 每周限额（已用比例、几点恢复）；最近的对话（进行中 / 空闲、工作区、步数）；用量统计窗口里 Gemini、Claude Code、Codex 和合计的每日 token、活跃时长、按模型 / 项目 | Gemini娘的 16 种表情（8 种原设定图表情由 AI 重画成完整半身像，另 8 种新画） |
 
 共用的部分：`companions/Companion/`（四只共用的主程序）、`Sources/PetHub.swift`（菜单栏、番茄钟、提醒的协调）、`Sources/Peers.swift`（各家额度）、`Sources/V3Figure.swift`、`Sources/PetChrome.swift`。几只同时运行时，按「Claude大小姐 → GPT龙娘 → Grok娘 → DeepSeek娘 → Gemini娘」的顺序由第一只在运行的桌宠显示菜单栏图标并负责计时；提醒由当前前台应用对应的那只桌宠弹出。每只都可以单独使用。
 

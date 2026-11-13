@@ -372,7 +372,7 @@ final class PetHub: NSObject {
         case "gemini": u = PeerStore.read("gemini", maxAge: petStaleAfter)
         default: u = nil
         }
-        return u?.windows.map(\.utilization).max()
+        return u?.windows.prefix(2).map(\.utilization).max()      // Gemini: its own 5-hour / weekly, not the Claude group
     }
 
     private func condition(_ when: String, _ a: String, _ b: String) -> Bool {

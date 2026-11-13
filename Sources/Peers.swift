@@ -377,6 +377,21 @@ struct PeerCard: View {
         }
     }
 
+    /// Windows past the first two in one line, e.g. "Claude 等：5 小时 0% · 每周 0%" (Antigravity's other model group).
+    private var extraWindows: String? {
+        let rest = usage.windows.dropFirst(2)
+        guard !rest.isEmpty else { return nil }
+        let parts = rest.map { w -> (String, String) in
+            let p = w.label.components(separatedBy: " · ")
+            return (p.count > 1 ? p[0] : "", "\(p.last ?? w.label) \(Int(w.utilization.rounded()))%")
+        }
+        let group = parts[0].0
+        if !group.isEmpty && parts.allSatisfy({ $0.0 == group }) {
+            return "\(group)：" + parts.map(\.1).joined(separator: " · ")
+        }
+        return rest.map { "\($0.label) \(Int($0.utilization.rounded()))%" }.joined(separator: " · ")
+    }
+
     private func barColor(_ v: Double) -> Color {
         v < 70 ? Color(red: 0.24, green: 0.70, blue: 0.48) : v < 90 ? .orange : .red
     }
@@ -392,7 +407,7 @@ struct PeerCard: View {
             }
             if !usage.windows.isEmpty {
                 HStack(spacing: 14) {
-                    ForEach(Array(usage.windows.enumerated()), id: \.offset) { _, w in
+                    ForEach(Array(usage.windows.prefix(2).enumerated()), id: \.offset) { _, w in
                         VStack(alignment: .leading, spacing: 3) {
                             HStack {
                                 Text(w.label).font(.caption)
@@ -412,6 +427,9 @@ struct PeerCard: View {
                         }
                     }
                 }
+            }
+            if let extra = extraWindows {
+                Text(extra).font(.caption.monospacedDigit()).foregroundStyle(.secondary)
             }
             ForEach(usage.lines, id: \.self) { l in
                 Text(l).font(.caption.monospacedDigit()).foregroundStyle(.secondary)

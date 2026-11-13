@@ -37,14 +37,16 @@ enum Spec {
 
     static func pill(_ m: AppModel) -> String {
         guard let w = m.gemini else { return "Gemini —" }
-        return "Gemini \(Int(w.utilization.rounded()))%"
+        return "Gemini \(Int(w.utilization.rounded()))%" + (m.week.map { " · 周 \(Int($0.utilization.rounded()))%" } ?? "")
     }
 
     static func hasUsage(_ m: AppModel) -> Bool { m.usage != nil }
 
     static func banterVars(_ m: AppModel) -> [String: String] {
         guard let w = m.gemini else { return [:] }
-        return ["quota": "\(Int(w.utilization.rounded()))%"]
+        var v = ["quota": "\(Int(w.utilization.rounded()))%"]
+        if let wk = m.week { v["week"] = "\(Int(wk.utilization.rounded()))%" }
+        return v
     }
 
     static func panel(_ m: AppModel, _ a: PanelActions) -> AnyView {
@@ -61,10 +63,12 @@ enum Spec {
 
     static func loadDemo(_ m: AppModel) {
         let now = Date()
-        m.usage = PeerUsage(provider: "gemini", title: "Antigravity · Gemini", plan: "Google AI Ultra",
-                            windows: [PeerWindow(label: "Gemini 模型", utilization: 35, resetsAt: now.addingTimeInterval(4800)),
-                                      PeerWindow(label: "Claude 等模型", utilization: 8, resetsAt: now.addingTimeInterval(14000))],
-                            observedAt: now.addingTimeInterval(-30), short: "Gemini 35%")
+        m.usage = PeerUsage(provider: "gemini", title: "Gemini", plan: "Google AI Ultra",
+                            windows: [PeerWindow(label: "5 小时", utilization: 35, resetsAt: now.addingTimeInterval(4800)),
+                                      PeerWindow(label: "每周", utilization: 12, resetsAt: now.addingTimeInterval(520000)),
+                                      PeerWindow(label: "Claude 等 · 5 小时", utilization: 8, resetsAt: now.addingTimeInterval(14000)),
+                                      PeerWindow(label: "Claude 等 · 每周", utilization: 3, resetsAt: now.addingTimeInterval(530000))],
+                            observedAt: now.addingTimeInterval(-30), short: "Gemini 35% · 周 12%")
         m.connected = true
         m.peers = [
             PeerUsage(provider: "claude", title: "Claude", plan: "Max",

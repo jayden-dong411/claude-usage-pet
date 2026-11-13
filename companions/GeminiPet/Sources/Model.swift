@@ -30,11 +30,16 @@ final class AppModel: ObservableObject {
     private var prevStatus: [String: String] = [:]
     private var busyReading = false
 
-    /// The Gemini models' quota (the first window).
+    /// The Gemini models' 5-hour limit (the first window).
     var gemini: PeerWindow? { usage?.windows.first }
+    /// The Gemini models' weekly limit.
+    var week: PeerWindow? { usage?.windows.first { $0.label == "每周" } }
+    /// The other model group's (Claude, GPT-OSS) limits.
+    var otherWindows: [PeerWindow] { usage?.windows.filter { $0.label.hasPrefix("Claude") } ?? [] }
 
+    /// By whichever Gemini limit is fuller, the 5-hour or the weekly one.
     var level: Int {
-        guard let u = gemini?.utilization else { return 0 }
+        guard let u = [gemini, week].compactMap({ $0?.utilization }).max() else { return 0 }
         switch u {
         case ..<40: return 1
         case ..<70: return 2

@@ -93,39 +93,66 @@ enum GeminiPeer {
     /// Live when Antigravity runs, else the last reading (up to 24 h old).
     static func read() -> PeerUsage? { live() ?? PeerStore.read("gemini") }
 
+    /// Windows in this order: Gemini 5 小时, Gemini 每周, then the same for the Claude / GPT group. The first two are the
+    /// Gemini models' own limits; panels show the rest smaller.
     private static func request() -> PeerUsage? {
-        guard let us = GeminiLS.call("GetUserStatus")?["userStatus"] as? [String: Any] else { return nil }
-        let configs = ((us["cascadeModelConfigData"] as? [String: Any])?["clientModelConfigs"] as? [[String: Any]]) ?? []
-        // Models share quota pools: one for Gemini models, one for the others (Claude, GPT-OSS).
-        var gemini: (Double, Date?)?, other: (Double, Date?)?
+        let us = GeminiLS.call("GetUserStatus")?["userStatus"] as? [String: Any]
+        let configs = ((us?["cascadeModelConfigData"] as? [String: Any])?["clientModelConfigs"] as? [[String: Any]]) ?? []
         var n: [String: String] = [:]
         for c in configs {
-            guard let label = c["label"] as? String else { continue }
-            if let id = (c["modelOrAlias"] as? [String: Any])?["model"] as? String {
+            if let label = c["label"] as? String, let id = (c["modelOrAlias"] as? [String: Any])?["model"] as? String {
                 n[id] = label.replacingOccurrences(of: #" \((Low|Medium|High|XHigh)\)$"#, with: "", options: .regularExpression)
-            }
-            guard let q = c["quotaInfo"] as? [String: Any] else { continue }
-            let left = (q["remainingFraction"] as? NSNumber)?.doubleValue ?? 0     // missing = none left
-            let reset = GeminiLS.date(q["resetTime"])
-            let isGemini = label.hasPrefix("Gemini") || label.hasPrefix("Orchestrator")
-            let cur = isGemini ? gemini : other
-            if cur == nil || left < cur!.0 {
-                if isGemini { gemini = (left, reset) } else { other = (left, reset) }
             }
         }
         lock.lock(); if !n.isEmpty { names = n }; lock.unlock()
-        func win(_ label: String, _ v: (Double, Date?)?) -> PeerWindow? {
-            guard let (left, reset) = v else { return nil }
+
+        func win(_ label: String, _ left: Double, _ reset: Date?) -> PeerWindow {
             if let reset, reset < Date() { return PeerWindow(label: label, utilization: 0, resetsAt: nil) }
             return PeerWindow(label: label, utilization: max(0, min(100, (1 - left) * 100)), resetsAt: reset)
         }
-        let windows = [win("Gemini 模型", gemini), win("Claude 等模型", other)].compactMap { $0 }
+        var windows: [PeerWindow] = []
+        // Each model group shares a 5-hour limit and a weekly limit (RetrieveUserQuotaSummary, as in Antigravity's
+        // own quota page).
+        if let groups = (GeminiLS.call("RetrieveUserQuotaSummary")?["response"] as? [String: Any])?["groups"] as? [[String: Any]] {
+            let sorted = groups.sorted { a, _ in ((a["displayName"] as? String) ?? "").hasPrefix("Gemini") }
+            for g in sorted {
+                let isGemini = ((g["displayName"] as? String) ?? "").hasPrefix("Gemini")
+                let buckets = (g["buckets"] as? [[String: Any]]) ?? []
+                for w in ["5h", "weekly"] {
+                    guard let b = buckets.first(where: { ($0["window"] as? String) == w }) else { continue }
+                    let left = (b["remainingFraction"] as? NSNumber)?.doubleValue ?? 0       // missing = none left
+                    let name = w == "5h" ? "5 小时" : "每周"
+                    windows.append(win(isGemini ? name : "Claude 等 · \(name)", left, GeminiLS.date(b["resetTime"])))
+                }
+            }
+        }
+        // Older Antigravity: only each model's 5-hour quota.
+        if windows.isEmpty {
+            var gemini: (Double, Date?)?, other: (Double, Date?)?
+            for c in configs {
+                guard let label = c["label"] as? String, let q = c["quotaInfo"] as? [String: Any] else { continue }
+                let left = (q["remainingFraction"] as? NSNumber)?.doubleValue ?? 0
+                let isGemini = label.hasPrefix("Gemini") || label.hasPrefix("Orchestrator")
+                let cur = isGemini ? gemini : other
+                if cur == nil || left < cur!.0 {
+                    if isGemini { gemini = (left, GeminiLS.date(q["resetTime"])) } else { other = (left, GeminiLS.date(q["resetTime"])) }
+                }
+            }
+            if let g = gemini { windows.append(win("5 小时", g.0, g.1)) }
+            if let o = other { windows.append(win("Claude 等 · 5 小时", o.0, o.1)) }
+        }
         guard !windows.isEmpty else { return nil }
-        let plan = ((us["userTier"] as? [String: Any])?["name"] as? String)
-            ?? (((us["planStatus"] as? [String: Any])?["planInfo"] as? [String: Any])?["planName"] as? String)
-        return PeerUsage(provider: "gemini", title: "Antigravity · Gemini", plan: plan, windows: windows, observedAt: Date(),
-                         short: "Gemini " + (windows.first.map { "\(Int($0.utilization.rounded()))%" } ?? "—"))
+        let plan = ((us?["userTier"] as? [String: Any])?["name"] as? String)
+            ?? (((us?["planStatus"] as? [String: Any])?["planInfo"] as? [String: Any])?["planName"] as? String)
+        let pct = { (w: PeerWindow) in "\(Int(w.utilization.rounded()))%" }
+        let five = windows.first { $0.label == "5 小时" }, week = windows.first { $0.label == "每周" }
+        let short = "Gemini " + ([five.map(pct), week.map { "周 " + pct($0) }].compactMap { $0 }.joined(separator: " · ").nilIfEmpty ?? "—")
+        return PeerUsage(provider: "gemini", title: "Gemini", plan: plan, windows: windows, observedAt: Date(), short: short)
     }
+}
+
+private extension String {
+    var nilIfEmpty: String? { isEmpty ? nil : self }
 }
 
 // MARK: - Conversations

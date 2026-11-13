@@ -198,22 +198,46 @@ async function geminiLive(maxAgeMs = 60e3) {
         headers: { 'X-Codeium-Csrf-Token': ep.token, 'Connect-Protocol-Version': '1', 'Content-Type': 'application/json' },
       });
       const us = r.ok ? (await r.json()).userStatus || {} : {};
-      const configs = ((us.cascadeModelConfigData || {}).clientModelConfigs) || [];
-      const pools = { gemini: null, other: null };
-      for (const c of configs) {
-        if (!c.label || !c.quotaInfo) continue;
-        const left = Number(c.quotaInfo.remainingFraction) || 0;
-        const reset = c.quotaInfo.resetTime ? Date.parse(c.quotaInfo.resetTime) : null;
-        const k = /^(Gemini|Orchestrator)/.test(c.label) ? 'gemini' : 'other';
-        if (!pools[k] || left < pools[k].left) pools[k] = { left, reset };
-      }
-      const win = (label, p) => !p ? null : (p.reset && p.reset < Date.now())
+      const win = (label, left, reset) => (reset && reset < Date.now())
         ? { label, utilization: 0, resetsAt: null }
-        : { label, utilization: Math.max(0, Math.min(100, (1 - p.left) * 100)), resetsAt: p.reset };
-      const windows = [win('Gemini 模型', pools.gemini), win('Claude 等模型', pools.other)].filter(Boolean);
+        : { label, utilization: Math.max(0, Math.min(100, (1 - left) * 100)), resetsAt: reset };
+      const windows = [];
+      // Each model group shares a 5-hour and a weekly limit (Antigravity's own quota summary).
+      try {
+        const q = await fetch(`http://127.0.0.1:${ep.port}/exa.language_server_pb.LanguageServerService/RetrieveUserQuotaSummary`, {
+          method: 'POST', body: '{}', signal: AbortSignal.timeout(10000),
+          headers: { 'X-Codeium-Csrf-Token': ep.token, 'Connect-Protocol-Version': '1', 'Content-Type': 'application/json' },
+        });
+        const groups = q.ok ? (((await q.json()).response || {}).groups || []) : [];
+        groups.sort((a) => (/^Gemini/.test(a.displayName || '') ? -1 : 1));
+        for (const g of groups) {
+          const gem = /^Gemini/.test(g.displayName || '');
+          for (const w of ['5h', 'weekly']) {
+            const b = (g.buckets || []).find((x) => x.window === w);
+            if (!b) continue;
+            const name = w === '5h' ? '5 小时' : '每周';
+            windows.push(win(gem ? name : `Claude 等 · ${name}`, Number(b.remainingFraction) || 0, b.resetTime ? Date.parse(b.resetTime) : null));
+          }
+        }
+      } catch {}
+      // Older Antigravity: only each model's 5-hour quota.
+      if (!windows.length) {
+        const pools = { gemini: null, other: null };
+        for (const c of (((us.cascadeModelConfigData || {}).clientModelConfigs) || [])) {
+          if (!c.label || !c.quotaInfo) continue;
+          const left = Number(c.quotaInfo.remainingFraction) || 0;
+          const reset = c.quotaInfo.resetTime ? Date.parse(c.quotaInfo.resetTime) : null;
+          const k = /^(Gemini|Orchestrator)/.test(c.label) ? 'gemini' : 'other';
+          if (!pools[k] || left < pools[k].left) pools[k] = { left, reset };
+        }
+        if (pools.gemini) windows.push(win('5 小时', pools.gemini.left, pools.gemini.reset));
+        if (pools.other) windows.push(win('Claude 等 · 5 小时', pools.other.left, pools.other.reset));
+      }
       if (windows.length) {
-        value = { provider: 'gemini', title: 'Antigravity · Gemini', plan: (us.userTier || {}).name || null, observedAt: Date.now(),
-          windows, short: `Gemini ${Math.round(windows[0].utilization)}%` };
+        const pct = (w) => `${Math.round(w.utilization)}%`;
+        const five = windows.find((w) => w.label === '5 小时'), week = windows.find((w) => w.label === '每周');
+        value = { provider: 'gemini', title: 'Gemini', plan: (us.userTier || {}).name || null, observedAt: Date.now(),
+          windows, short: 'Gemini ' + ([five && pct(five), week && '周 ' + pct(week)].filter(Boolean).join(' · ') || '—') };
         writePeer(value);
       }
     } catch { value = null; }

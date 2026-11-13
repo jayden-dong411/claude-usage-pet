@@ -61,6 +61,13 @@
     </div>`;
   }
 
+  /** Windows past the first two in one line, e.g. "Claude 等：5 小时 0% · 每周 0%" (Antigravity's other model group). */
+  function extraWindows(ws) {
+    const parts = ws.map((w) => { const p = w.label.split(' · '); return [p.length > 1 ? p[0] : '', `${p[p.length - 1]} ${Math.round(w.utilization)}%`]; });
+    const g = parts[0][0];
+    if (g && parts.every((x) => x[0] === g)) return `${g}：` + parts.map((x) => x[1]).join(' · ');
+    return ws.map((w) => `${w.label} ${Math.round(w.utilization)}%`).join(' · ');
+  }
   function spark(pts) {
     if (!pts || pts.length < 3) return '';
     const vals = pts.map((p) => p[1]);
@@ -127,12 +134,13 @@
     if (open) for (const p of s.peers) {
       const tint = { claude: '217,119,87', codex: '110,92,219', grok: '199,158,51', deepseek: '77,107,254', gemini: '107,92,242' }[p.provider] || '150,150,150';
       const icon = { claude: '✺', codex: '✦', grok: '⚡', deepseek: '🐟', gemini: '✧' }[p.provider] || '•';
-      const wins = p.windows.map((w) => `<div style="flex:1"><div class="row" style="font-size:12px"><span>${w.label}</span><span class="spacer"></span><b class="mono" style="color:${U.barColor(w.utilization)}">${Math.round(w.utilization)}%</b></div>
+      const wins = p.windows.slice(0, 2).map((w) => `<div style="flex:1"><div class="row" style="font-size:12px"><span>${w.label}</span><span class="spacer"></span><b class="mono" style="color:${U.barColor(w.utilization)}">${Math.round(w.utilization)}%</b></div>
         <div class="bar thin" style="margin:3px 0"><i style="width:${Math.min(100, w.utilization)}%;background:${U.barColor(w.utilization)}"></i></div>
         <div class="meta">${w.resetsAt ? U.when(w.resetsAt) + ' 重置' : '还没开始计时'}</div></div>`).join('');
       html += `<div class="peer" style="background:rgba(${tint},.1)" data-act="openPeer:${p.provider}">
         <div class="ph"><span style="color:rgb(${tint})">${icon}</span><b>${U.esc(p.title)} ${p.provider === 'deepseek' ? '余额' : '额度'}</b><span class="meta">${U.esc(p.plan || '')}</span><span class="spacer"></span><span class="faint" style="font-size:10px">${U.when(p.observedAt)} 的数据</span></div>
         ${wins ? `<div class="row" style="gap:14px;align-items:flex-start">${wins}</div>` : ''}
+        ${p.windows.length > 2 ? `<div class="meta">${U.esc(extraWindows(p.windows.slice(2)))}</div>` : ''}
         ${(p.lines || []).map((l) => `<div class="meta">${U.esc(l)}</div>`).join('')}
         ${p.note ? `<div class="faint" style="font-size:10px;margin-top:4px">${U.esc(p.note)}${p.provider === 'codex' && s.codexError ? `（实时查询失败：${U.esc(s.codexError)}）` : ''}</div>` : ''}</div>`;
     }
