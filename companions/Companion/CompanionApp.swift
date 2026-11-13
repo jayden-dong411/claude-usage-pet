@@ -121,6 +121,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, NSW
         model.start()
         Spec.dashboard?.start()
         if !snapshotMode { hub.start(me: Spec.petID, client: self) }
+        // Opened by hand (Finder, Dock, Spotlight): show up for a moment even if her AI app isn't in front,
+        // otherwise she starts hidden and it looks as if she didn't open.
+        if !snapshotMode { forceShowUntil = Date().addingTimeInterval(12) }
         react(.greet, loops: 2, say: Spec.greeting)
         startFrame()
         tick = Timer.scheduledTimer(withTimeInterval: 0.12, repeats: true) { [weak self] _ in

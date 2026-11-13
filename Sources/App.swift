@@ -132,6 +132,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, NSW
         model.start()
         dashboard.start()
         if !snapshotMode { hub.start(me: "claude", client: self) }
+        // Opened by hand: show up for a moment even if Claude isn't in front, so it's clear she started.
+        if !snapshotMode { forceShowUntil = Date().addingTimeInterval(12) }
         react(.greet, say: "本小姐驾到～ 点我看用量")
         faceTimer = Timer.scheduledTimer(withTimeInterval: 2, repeats: true) { [weak self] _ in
             Task { @MainActor in
